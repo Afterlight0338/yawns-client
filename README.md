@@ -42,4 +42,6 @@ The code is MIT-licensed, see [LICENCE](LICENCE). It is based on code by ppy Pty
 
 Game assets (skin, samples, textures) are not in this repo. They come from ppy's osu-resources and are licensed separately under CC BY-NC 4.0, so YAWNS is free and non-commercial. The release builds include them without the Torus and Venera fonts (those need a commercial licence), YAWNS uses Inter instead. The intro voice line is cut from osu!lazer's triangles intro (CC BY-NC 4.0, ppy Pty Ltd).
 
+Bundled third-party libraries and their licences: [THIRD-PARTY.md](THIRD-PARTY.md).
+
 YAWNS is not affiliated with or endorsed by ppy Pty Ltd.
