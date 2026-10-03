@@ -1,0 +1,12 @@
+{
+  "solution": {
+    "path": "osu.sln",
+    "projects": [
+      "osu.Desktop\\osu.Desktop.csproj",
+      "osu.Game.Rulesets.Osu.Tests\\osu.Game.Rulesets.Osu.Tests.csproj",
+      "osu.Game.Rulesets.Osu\\osu.Game.Rulesets.Osu.csproj",
+      "osu.Game.Tests\\osu.Game.Tests.csproj",
+      "osu.Game\\osu.Game.csproj"
+    ]
+  }
+}
