@@ -9,7 +9,9 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Caching;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Primitives;
+using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
@@ -25,6 +27,7 @@ using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Rulesets.Osu.Objects.Drawables;
 using osu.Game.Screens.Edit;
 using osu.Game.Screens.Edit.Compose;
+using osu.Game.Screens.Edit.MappingTools;
 using osuTK;
 using osuTK.Input;
 
@@ -101,6 +104,9 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
                 TailOverlay = CreateCircleOverlay(HitObject, SliderPosition.End),
             };
 
+            AddRangeInternal(ghostSegments); // YAWNS
+            AddInternal(trueEnd);
+
             // tail will always have a non-null end drag marker.
             Debug.Assert(TailOverlay.EndDragMarker != null);
 
@@ -151,6 +157,10 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
         protected override void Update()
         {
             base.Update();
+
+            updateDirectEdit(); // YAWNS: follow the mouse each frame while the curve is dragged
+            updateInsertionGhost(); // YAWNS
+            updateTrueEnd(); // YAWNS
 
             if (IsSelected)
                 BodyPiece.UpdateFrom(HitObject);
@@ -219,11 +229,15 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
 
                 case MouseButton.Left:
 
+                    // YAWNS: Alt+drag on the curve of the selected slider edits the curve directly (middle click is lazer's quick delete, so it is not used).
+                    if (e.AltPressed && !e.ControlPressed && IsSelected && selectedObjects.Count < 2 && beginDirectEdit(e.MousePosition))
+                        return true;
+
                     // If there's more than two objects selected, ctrl+click should deselect
                     if (e.ControlPressed && IsSelected && selectedObjects.Count < 2)
                     {
                         changeHandler?.BeginChange();
-                        placementControlPoint = addControlPoint(e.MousePosition);
+                        placementControlPoint = addControlPoint(e.MousePosition, e.ShiftPressed);
                         ControlPointVisualiser?.SetSelectionTo(placementControlPoint);
                         return true; // Stop input from being handled and modifying the selection
                     }
@@ -370,8 +384,212 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
 
         #endregion
 
+        #region YAWNS: direct curve editing (middle drag), Ctrl point insertion preview
+
+        private PathControlPoint[]? directPoints;
+        private Vector2[]? directOriginal;
+        private float directT;
+        private Vector2 directMouseStart;
+
+        private const int ghost_segments = 48;
+        private readonly Box[] ghostSegments = Enumerable.Range(0, ghost_segments).Select(_ => new Box { Origin = Anchor.Centre, Colour = Colour4.Yellow, Alpha = 0, Height = 2 }).ToArray();
+        private Vector2 ghostDrawnFor = new Vector2(float.NaN);
+
+        // YAWNS: where the legacy last tick (the "true" slider end, 36 ms early or half the slider) is, drawn while the slider is selected.
+        private readonly CircularContainer trueEnd = new CircularContainer
+        {
+            Origin = Anchor.Centre,
+            Masking = true,
+            BorderThickness = 2,
+            BorderColour = Colour4.White,
+            Alpha = 0,
+            Child = new Box { RelativeSizeAxes = Axes.Both, Alpha = 0, AlwaysPresent = true },
+        };
+
+        private void updateTrueEnd()
+        {
+            trueEnd.Alpha = IsSelected ? 0.6f : 0;
+
+            if (!IsSelected || HitObject.Duration <= 0)
+                return;
+
+            double tickTime = Math.Max(HitObject.Duration / 2, HitObject.Duration - 36);
+
+            trueEnd.Size = new Vector2((float)HitObject.Radius * 2);
+            trueEnd.Position = HitObject.StackedPositionAt(tickTime / HitObject.Duration);
+        }
+
+
+        /// <summary>
+        /// The Bezier segments of the path: control points from a typed point up to and including the next typed point.
+        /// </summary>
+        private IEnumerable<PathControlPoint[]> bezierSegments()
+        {
+            var list = controlPoints.ToList();
+            int start = 0;
+
+            for (int i = 1; i < list.Count; i++)
+            {
+                if (list[i].Type == null && i != list.Count - 1)
+                    continue;
+
+                if (list[start].Type == PathType.BEZIER)
+                    yield return list.GetRange(start, i - start + 1).ToArray();
+
+                start = i;
+            }
+        }
+
+        private bool beginDirectEdit(Vector2 mousePosition)
+        {
+            Vector2 local = mousePosition - HitObject.Position;
+            PathControlPoint[]? best = null;
+            float bestT = 0, bestDistance = 25;
+
+            foreach (var segment in bezierSegments().Where(s => s.Length >= 3))
+            {
+                var (t, distance) = BezierTools.ClosestT(segment.Select(p => p.Position).ToArray(), local);
+
+                if (distance < bestDistance)
+                {
+                    best = segment;
+                    bestT = t;
+                    bestDistance = distance;
+                }
+            }
+
+            if (best == null)
+                return false;
+
+            changeHandler?.BeginChange();
+            directPoints = best;
+            directOriginal = best.Select(p => p.Position).ToArray();
+            directT = bestT;
+            directMouseStart = mousePosition;
+            return true;
+        }
+
+        private void applyDirectEdit(Vector2 delta)
+        {
+            Debug.Assert(directPoints != null && directOriginal != null);
+
+            var before = directPoints.Select(p => p.Position).ToArray();
+            var offsets = BezierTools.DragOffsets(directPoints.Length, directT, delta);
+
+            for (int i = 0; i < directPoints.Length; i++)
+                directPoints[i].Position = directOriginal[i] + offsets[i];
+
+            HitObject.SnapTo(distanceSnapProvider);
+
+            if (HitObject.Path.HasValidLengthForPlacement)
+                return;
+
+            for (int i = 0; i < directPoints.Length; i++)
+                directPoints[i].Position = before[i];
+
+            HitObject.SnapTo(distanceSnapProvider);
+        }
+
+        private void updateDirectEdit()
+        {
+            if (directPoints == null)
+                return;
+
+            var input = GetContainingInputManager();
+
+            if (input == null || !input.CurrentState.Mouse.IsPressed(MouseButton.Left))
+            {
+                endDirectEdit();
+                return;
+            }
+
+            applyDirectEdit(ToLocalSpace(input.CurrentState.Mouse.Position) - directMouseStart);
+        }
+
+        private void endDirectEdit()
+        {
+            directPoints = null;
+            directOriginal = null;
+            changeHandler?.EndChange();
+        }
+
+        /// <summary>
+        /// While Ctrl is held over a selected single-segment Bezier slider, shows the curve it would become if a point were added at the cursor.
+        /// </summary>
+        private void updateInsertionGhost()
+        {
+            var input = GetContainingInputManager();
+            bool show = input != null && IsSelected && selectedObjects.Count == 1 && input.CurrentState.Keyboard.ControlPressed
+                        && controlPoints.Count >= 3 && controlPoints[0].Type == PathType.BEZIER && controlPoints.Skip(1).All(p => p.Type == null);
+
+            if (!show)
+            {
+                if (ghostDrawnFor.X is not float.NaN)
+                {
+                    foreach (var s in ghostSegments)
+                        s.Alpha = 0;
+
+                    ghostDrawnFor = new Vector2(float.NaN);
+                }
+
+                return;
+            }
+
+            Vector2 local = ToLocalSpace(input!.CurrentState.Mouse.Position) - HitObject.Position;
+
+            if (local == ghostDrawnFor)
+                return;
+
+            ghostDrawnFor = local;
+
+            var points = controlPoints.Select(p => p.Position).ToList();
+            points.Insert(insertionIndexFor(local), local);
+
+            Vector2 previous = BezierTools.Evaluate(points, 0);
+
+            for (int i = 0; i < ghost_segments; i++)
+            {
+                Vector2 next = BezierTools.Evaluate(points, (i + 1) / (float)ghost_segments);
+                var box = ghostSegments[i];
+
+                box.Alpha = 0.7f;
+                box.Position = HitObject.Position + (previous + next) / 2;
+                box.Width = Vector2.Distance(previous, next) + 1;
+                box.Rotation = MathHelper.RadiansToDegrees(MathF.Atan2(next.Y - previous.Y, next.X - previous.X));
+                previous = next;
+            }
+        }
+
+        private int insertionIndexFor(Vector2 position, bool atEnds = false)
+        {
+            int insertionIndex = 0;
+            float minDistance = float.MaxValue;
+
+            for (int i = 0; i < controlPoints.Count - 1; i++)
+            {
+                float dist = new Line(controlPoints[i].Position, controlPoints[i + 1].Position).DistanceToPoint(position);
+
+                if (dist < minDistance)
+                {
+                    insertionIndex = i + 1;
+                    minDistance = dist;
+                }
+            }
+
+            // Shift: the point goes at whichever end of the slider is nearer.
+            if (atEnds)
+                insertionIndex = position.LengthSquared < (position - controlPoints[^1].Position).LengthSquared ? 1 : controlPoints.Count;
+
+            return insertionIndex;
+        }
+
+        #endregion
+
         protected override bool OnDragStart(DragStartEvent e)
         {
+            if (directPoints != null) // YAWNS: the curve drag is handled per frame, do not also move the object
+                return true;
+
             if (placementControlPoint == null)
                 return base.OnDragStart(e);
 
@@ -381,6 +599,9 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
 
         protected override void OnDrag(DragEvent e)
         {
+            if (directPoints != null) // YAWNS
+                return;
+
             base.OnDrag(e);
 
             if (placementControlPoint != null)
@@ -431,23 +652,11 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
             adjustLength(desiredDistance, adjustVelocityMomentary);
         }
 
-        private PathControlPoint addControlPoint(Vector2 position)
+        private PathControlPoint addControlPoint(Vector2 position, bool atEnds = false)
         {
             position -= HitObject.Position;
 
-            int insertionIndex = 0;
-            float minDistance = float.MaxValue;
-
-            for (int i = 0; i < controlPoints.Count - 1; i++)
-            {
-                float dist = new Line(controlPoints[i].Position, controlPoints[i + 1].Position).DistanceToPoint(position);
-
-                if (dist < minDistance)
-                {
-                    insertionIndex = i + 1;
-                    minDistance = dist;
-                }
-            }
+            int insertionIndex = insertionIndexFor(position, atEnds); // YAWNS: shared with the Ctrl preview
 
             var pathControlPoint = new PathControlPoint { Position = position };
 

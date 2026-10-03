@@ -108,6 +108,7 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
             });
             AddUntilStep("popover present", getPopover, () => Is.Not.Null);
 
+            AddStep("choose playfield centre (YAWNS defaults to the selection centre)", () => getPopover().ChildrenOfType<EditorRadioButton>().Single(btn => btn.Text == "Playfield centre").TriggerClick());
             AddStep("rotate by 180deg", () => getPopover().ChildrenOfType<TextBox>().Single().Current.Value = "180");
             AddAssert("first object rotated 180deg around playfield centre",
                 () => EditorBeatmap.HitObjects.OfType<HitCircle>().ElementAt(0).Position,

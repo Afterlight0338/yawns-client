@@ -7,6 +7,9 @@ using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Input.Bindings;
+using osu.Framework.Input.Events;
+using osu.Game.Input.Bindings;
 using osu.Game.Rulesets.Edit;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Osu.Objects;
@@ -21,11 +24,22 @@ namespace osu.Game.Rulesets.Osu.Edit
     /// <summary>
     /// YAWNS: selection tools on the compose screen. Also reachable from the right-click "Tools" menu.
     /// </summary>
-    public partial class MappingToolboxGroup : EditorToolboxGroup
+    public partial class MappingToolboxGroup : EditorToolboxGroup, IScrollBindingHandler<GlobalAction>
     {
         public readonly StreamOrganiser StreamOrganiser = new StreamOrganiser();
 
         public readonly RadialCopy RadialCopy = new RadialCopy();
+
+        public readonly AngledFlip AngledFlip = new AngledFlip();
+
+        public readonly SymmetryCentre SymmetryCentre = new SymmetryCentre();
+
+        public readonly RadialGuide RadialGuide;
+
+        /// <summary>
+        /// The angle of the quick rotate hotkeys, in degrees.
+        /// </summary>
+        public readonly BindableFloat QuickRotateStep = new BindableFloat(60) { MinValue = 0.1f, MaxValue = 180, Precision = 0.1f };
 
         public readonly SliderCompletionator SliderCompletionator = new SliderCompletionator();
 
@@ -55,6 +69,12 @@ namespace osu.Game.Rulesets.Osu.Edit
         private EditorToolButton axisButton = null!;
         private EditorToolButton snappingButton = null!;
         private EditorToolButton radialButton = null!;
+        private EditorToolButton flipButton = null!;
+        private EditorToolButton guideButton = null!;
+        private EditorToolButton perfectButton = null!;
+        private EditorToolButton quickRotateButton = null!;
+        private EditorToolButton randomiseButton = null!;
+        private EditorToolButton svButton = null!;
         private EditorToolButton completeButton = null!;
         private EditorToolButton slideratorButton = null!;
         private EditorToolButton tumourButton = null!;
@@ -62,6 +82,7 @@ namespace osu.Game.Rulesets.Osu.Edit
         public MappingToolboxGroup()
             : base("mapping tools")
         {
+            RadialGuide = new RadialGuide(SymmetryCentre);
         }
 
         [BackgroundDependencyLoader]
@@ -88,7 +109,25 @@ namespace osu.Game.Rulesets.Osu.Edit
                         () => null),
                     radialButton = new EditorToolButton("Radial copy",
                         () => new SpriteIcon { Icon = FontAwesome.Solid.SyncAlt },
-                        () => new RadialCopyPopover(RadialCopy)),
+                        () => new RadialCopyPopover(RadialCopy, SymmetryCentre)),
+                    guideButton = new EditorToolButton("Radial guide",
+                        () => new SpriteIcon { Icon = FontAwesome.Solid.Bullseye },
+                        () => new RadialGuidePopover(RadialGuide)),
+                    svButton = new EditorToolButton("SV equaliser",
+                        () => new SpriteIcon { Icon = FontAwesome.Solid.BalanceScale },
+                        () => new SvEqualiserPopover()),
+                    randomiseButton = new EditorToolButton("Randomise sliders",
+                        () => new SpriteIcon { Icon = FontAwesome.Solid.Dice },
+                        () => new RandomiseSlidersPopover()),
+                    quickRotateButton = new EditorToolButton("Quick rotate",
+                        () => new SpriteIcon { Icon = FontAwesome.Solid.Redo },
+                        () => new QuickRotatePopover(this)),
+                    perfectButton = new EditorToolButton("Perfect it",
+                        () => new SpriteIcon { Icon = FontAwesome.Solid.Magic },
+                        () => new PerfectItPopover()),
+                    flipButton = new EditorToolButton("Angled flip",
+                        () => new SpriteIcon { Icon = FontAwesome.Solid.ArrowsAltH },
+                        () => new AngledFlipPopover(AngledFlip, SymmetryCentre)),
                     completeButton = new EditorToolButton("Complete sliders",
                         () => new SpriteIcon { Icon = FontAwesome.Solid.RulerHorizontal },
                         () => new SliderCompletionatorPopover(SliderCompletionator)),
@@ -114,6 +153,9 @@ namespace osu.Game.Rulesets.Osu.Edit
             CanOrganiseStream.BindValueChanged(can => streamButton.Enabled.Value = can.NewValue, true);
             CanSavePattern.BindValueChanged(can => patternButton.Enabled.Value = can.NewValue, true);
             CanSavePattern.BindValueChanged(can => radialButton.Enabled.Value = can.NewValue, true);
+            CanSavePattern.BindValueChanged(can => flipButton.Enabled.Value = can.NewValue, true);
+            CanSavePattern.BindValueChanged(can => perfectButton.Enabled.Value = can.NewValue, true);
+            CanSavePattern.BindValueChanged(can => quickRotateButton.Enabled.Value = can.NewValue, true);
             selectedHitObjects.BindCollectionChanged((_, _) => CanCompleteSliders.Value = selectedHitObjects.Any(h => h is Slider), true);
             CanCompleteSliders.BindValueChanged(can => completeButton.Enabled.Value = can.NewValue, true);
             CanCompleteSliders.BindValueChanged(can => slideratorButton.Enabled.Value = can.NewValue, true);
@@ -140,6 +182,55 @@ namespace osu.Game.Rulesets.Osu.Edit
         {
             if (CanSavePattern.Value && !radialButton.Selected.Value)
                 radialButton.TriggerClick();
+        }
+
+        /// <summary>
+        /// Rotates the selection by the quick rotate step: 1 clockwise, -1 anticlockwise.
+        /// </summary>
+        public void QuickRotate(int direction) => RotateBy(direction * QuickRotateStep.Value);
+
+        public void RotateBy(float degrees)
+        {
+            if (CanSavePattern.Value)
+                RotationHandler.Rotate(degrees);
+        }
+
+        public bool OnPressed(KeyBindingPressEvent<GlobalAction> e) => false;
+
+        public void OnReleased(KeyBindingReleaseEvent<GlobalAction> e)
+        {
+        }
+
+        // YAWNS: Ctrl+Shift+Scroll rotates live, 5 degrees a notch, 1 with Alt added (rebindable). Alt+Scroll alone is the timeline zoom, so it must stay free.
+        public bool OnScroll(KeyBindingScrollEvent<GlobalAction> e)
+        {
+            float degrees = e.Action switch
+            {
+                GlobalAction.EditorLiveRotateClockwise => 5,
+                GlobalAction.EditorLiveRotateAnticlockwise => -5,
+                GlobalAction.EditorLiveRotateFineClockwise => 1,
+                GlobalAction.EditorLiveRotateFineAnticlockwise => -1,
+                _ => 0,
+            };
+
+            if (degrees == 0)
+                return false;
+
+            RotateBy(degrees * e.ScrollAmount);
+            return true;
+        }
+
+
+        public void ShowPerfectIt()
+        {
+            if (CanSavePattern.Value && !perfectButton.Selected.Value)
+                perfectButton.TriggerClick();
+        }
+
+        public void ShowAngledFlip()
+        {
+            if (CanSavePattern.Value && !flipButton.Selected.Value)
+                flipButton.TriggerClick();
         }
 
         public void ShowTumourGenerator()

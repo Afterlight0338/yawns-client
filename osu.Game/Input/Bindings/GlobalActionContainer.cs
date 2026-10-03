@@ -152,11 +152,24 @@ namespace osu.Game.Input.Bindings
             new KeyBinding(new[] { InputKey.T }, GlobalAction.EditorTapForBPM),
             new KeyBinding(new[] { InputKey.Control, InputKey.H }, GlobalAction.EditorFlipHorizontally),
             new KeyBinding(new[] { InputKey.Control, InputKey.J }, GlobalAction.EditorFlipVertically),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.T }, GlobalAction.EditorAngledFlip),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Alt, InputKey.Period }, GlobalAction.EditorQuickRotateClockwise),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Alt, InputKey.Comma }, GlobalAction.EditorQuickRotateAnticlockwise),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.MouseWheelUp }, GlobalAction.EditorLiveRotateClockwise),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.MouseWheelDown }, GlobalAction.EditorLiveRotateAnticlockwise),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.Alt, InputKey.MouseWheelUp }, GlobalAction.EditorLiveRotateFineClockwise),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.Alt, InputKey.MouseWheelDown }, GlobalAction.EditorLiveRotateFineAnticlockwise),
+            // With Shift held many platforms report the wheel as horizontal.
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.MouseWheelRight }, GlobalAction.EditorLiveRotateClockwise),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.MouseWheelLeft }, GlobalAction.EditorLiveRotateAnticlockwise),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.Alt, InputKey.MouseWheelRight }, GlobalAction.EditorLiveRotateFineClockwise),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.Alt, InputKey.MouseWheelLeft }, GlobalAction.EditorLiveRotateFineAnticlockwise),
             new KeyBinding(new[] { InputKey.Control, InputKey.Alt, InputKey.MouseWheelDown }, GlobalAction.EditorDecreaseDistanceSpacing),
             new KeyBinding(new[] { InputKey.Control, InputKey.Alt, InputKey.MouseWheelUp }, GlobalAction.EditorIncreaseDistanceSpacing),
             new KeyBinding(new[] { InputKey.Control, InputKey.MouseWheelDown }, GlobalAction.EditorCyclePreviousBeatSnapDivisor),
             new KeyBinding(new[] { InputKey.Control, InputKey.MouseWheelUp }, GlobalAction.EditorCycleNextBeatSnapDivisor),
             new KeyBinding(InputKey.None, GlobalAction.EditorToggleMoveControl),
+            new KeyBinding(InputKey.None, GlobalAction.EditorContinueDistanceSnap),
             new KeyBinding(new[] { InputKey.Control, InputKey.R }, GlobalAction.EditorToggleRotateControl),
             new KeyBinding(new[] { InputKey.Control, InputKey.E }, GlobalAction.EditorToggleScaleControl),
 
@@ -631,6 +644,31 @@ namespace osu.Game.Input.Bindings
 
         [LocalisableDescription(typeof(EditorStrings), nameof(EditorStrings.SeekToEnd))]
         EditorSeekToEnd,
+
+        // YAWNS: appended at the end so stored key bindings keep their numbers.
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorAngledFlip))]
+        EditorAngledFlip,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorQuickRotateClockwise))]
+        EditorQuickRotateClockwise,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorQuickRotateAnticlockwise))]
+        EditorQuickRotateAnticlockwise,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorLiveRotateClockwise))]
+        EditorLiveRotateClockwise,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorLiveRotateAnticlockwise))]
+        EditorLiveRotateAnticlockwise,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorLiveRotateFineClockwise))]
+        EditorLiveRotateFineClockwise,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorLiveRotateFineAnticlockwise))]
+        EditorLiveRotateFineAnticlockwise,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorContinueDistanceSnap))]
+        EditorContinueDistanceSnap,
     }
 
     public enum GlobalActionCategory

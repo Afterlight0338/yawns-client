@@ -16,6 +16,7 @@ using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -232,11 +233,22 @@ namespace osu.Game.Screens.Edit.Compose.Components
         {
         }
 
-        internal partial class DivisorDisplay : OsuAnimatedButton, IHasPopover
+        internal partial class DivisorDisplay : OsuAnimatedButton, IHasPopover, IHasTooltip
         {
             public BindableBeatDivisor BeatDivisor { get; } = new BindableBeatDivisor();
 
             private readonly OsuSpriteText divisorText;
+
+            // YAWNS: hovering the divisor shows what BPM it is at the current time (170 BPM at 1/6 is 255 BPM, like a 1/4 stream at that tempo).
+            [Resolved(CanBeNull = true)]
+            private EditorBeatmap? editorBeatmap { get; set; }
+
+            [Resolved(CanBeNull = true)]
+            private EditorClock? editorClock { get; set; }
+
+            public LocalisableString TooltipText => editorBeatmap == null || editorClock == null
+                ? string.Empty
+                : $"{editorBeatmap.ControlPointInfo.TimingPointAt(editorClock.CurrentTime).BPM * BeatDivisor.Value / 4:0.##} BPM at 1/{BeatDivisor.Value}";
 
             public DivisorDisplay()
                 : base(HoverSampleSet.Default)

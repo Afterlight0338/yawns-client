@@ -305,6 +305,46 @@ namespace osu.Game.Localisation
         public static LocalisableString EditorFlipVertically => new TranslatableString(getKey(@"editor_flip_vertically"), @"Flip selection vertically");
 
         /// <summary>
+        /// "Angled flip selection"
+        /// </summary>
+        public static LocalisableString EditorAngledFlip => new TranslatableString(getKey(@"editor_angled_flip"), @"Angled flip selection");
+
+        /// <summary>
+        /// "Rotate selection clockwise by the quick rotate step"
+        /// </summary>
+        public static LocalisableString EditorQuickRotateClockwise => new TranslatableString(getKey(@"editor_quick_rotate_clockwise"), @"Rotate selection clockwise by the quick rotate step");
+
+        /// <summary>
+        /// "Rotate selection anticlockwise by the quick rotate step"
+        /// </summary>
+        public static LocalisableString EditorQuickRotateAnticlockwise => new TranslatableString(getKey(@"editor_quick_rotate_anticlockwise"), @"Rotate selection anticlockwise by the quick rotate step");
+
+        /// <summary>
+        /// "Rotate selection clockwise (live, 5 degrees per notch)"
+        /// </summary>
+        public static LocalisableString EditorLiveRotateClockwise => new TranslatableString(getKey(@"editor_live_rotate_clockwise"), @"Rotate selection clockwise (live, 5 degrees per notch)");
+
+        /// <summary>
+        /// "Rotate selection anticlockwise (live, 5 degrees per notch)"
+        /// </summary>
+        public static LocalisableString EditorLiveRotateAnticlockwise => new TranslatableString(getKey(@"editor_live_rotate_anticlockwise"), @"Rotate selection anticlockwise (live, 5 degrees per notch)");
+
+        /// <summary>
+        /// "Rotate selection clockwise (live, 1 degree per notch)"
+        /// </summary>
+        public static LocalisableString EditorLiveRotateFineClockwise => new TranslatableString(getKey(@"editor_live_rotate_fine_clockwise"), @"Rotate selection clockwise (live, 1 degree per notch)");
+
+        /// <summary>
+        /// "Rotate selection anticlockwise (live, 1 degree per notch)"
+        /// </summary>
+        public static LocalisableString EditorLiveRotateFineAnticlockwise => new TranslatableString(getKey(@"editor_live_rotate_fine_anticlockwise"), @"Rotate selection anticlockwise (live, 1 degree per notch)");
+
+        /// <summary>
+        /// "Continue the distance between the last two objects"
+        /// </summary>
+        public static LocalisableString EditorContinueDistanceSnap => new TranslatableString(getKey(@"editor_continue_distance_snap"), @"Continue the distance between the last two objects");
+
+        /// <summary>
         /// "Increase distance spacing"
         /// </summary>
         public static LocalisableString EditorIncreaseDistanceSpacing => new TranslatableString(getKey(@"editor_increase_distance_spacing"), @"Increase distance spacing");

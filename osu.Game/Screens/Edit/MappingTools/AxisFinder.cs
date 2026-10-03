@@ -58,6 +58,29 @@ namespace osu.Game.Screens.Edit.MappingTools
         public static double[] BaseAxes(double tilt) => new[] { tilt, -tilt, 90 + tilt, 90 - tilt };
 
         /// <summary>
+        /// <paramref name="travel"/> (a drag from where it started) reduced to its component along the nearest of the four base axes, so a drag stays on an axis.
+        /// </summary>
+        public static Vector2 ProjectOntoNearestAxis(Vector2 travel, double tilt)
+        {
+            Vector2 best = Vector2.Zero;
+            float bestAlong = -1;
+
+            foreach (double axis in BaseAxes(tilt))
+            {
+                var direction = new Vector2((float)Math.Cos(MathHelper.DegreesToRadians(axis)), (float)Math.Sin(MathHelper.DegreesToRadians(axis)));
+                float along = Vector2.Dot(travel, direction);
+
+                if (Math.Abs(along) > bestAlong)
+                {
+                    bestAlong = Math.Abs(along);
+                    best = direction * along;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>
         /// Direction of the line from <paramref name="from"/> to <paramref name="to"/>, in degrees (screen coordinates, y down).
         /// </summary>
         public static double AngleOf(Vector2 from, Vector2 to) => MathHelper.RadiansToDegrees(Math.Atan2(to.Y - from.Y, to.X - from.X));

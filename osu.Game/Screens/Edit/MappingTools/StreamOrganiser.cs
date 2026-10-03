@@ -70,6 +70,16 @@ namespace osu.Game.Screens.Edit.MappingTools
         };
 
         /// <summary>
+        /// YAWNS: alternate objects sit this many pixels to either side of the stream line (0 is off), for wiggle streams.
+        /// </summary>
+        public readonly BindableDouble Wiggle = new BindableDouble(0)
+        {
+            MinValue = 0,
+            MaxValue = 40,
+            Precision = 0.5,
+        };
+
+        /// <summary>
         /// For <see cref="ShapeMode.Clean"/>: 0 evens out the turning the most (bends get rounder), 1 stays closest to the placed shape.
         /// Wobble between neighbouring objects is removed either way.
         /// </summary>
@@ -79,6 +89,32 @@ namespace osu.Game.Screens.Edit.MappingTools
             MaxValue = 1,
             Precision = 0.05,
         };
+
+        /// <summary>
+        /// YAWNS: wiggle: every other object (from the second) is moved <paramref name="pixels"/> to alternating sides of the stream's direction there,
+        /// the first object stays on the line. 0 changes nothing.
+        /// </summary>
+        public static Vector2[] Wiggled(Vector2[] points, double pixels)
+        {
+            if (pixels <= 0 || points.Length < 3)
+                return points;
+
+            var result = (Vector2[])points.Clone();
+
+            for (int i = 1; i < points.Length; i++)
+            {
+                Vector2 direction = points[Math.Min(i + 1, points.Length - 1)] - points[i - 1];
+
+                if (direction.LengthSquared < 1e-6f)
+                    continue;
+
+                direction.Normalize();
+                float side = i % 2 == 1 ? 1 : -1;
+                result[i] = points[i] + new Vector2(-direction.Y, direction.X) * side * (float)pixels;
+            }
+
+            return result;
+        }
 
         /// <param name="positions">Object positions, in time order.</param>
         /// <param name="times">Object start times, same order.</param>
@@ -92,7 +128,7 @@ namespace osu.Game.Screens.Edit.MappingTools
                 _ => 1,
             };
 
-            return Organise(positions, times, ratio, FollowShape.Value, Shape.Value, Spacing.Value == SpacingSource.DistanceSnap ? distanceSnap : null);
+            return Wiggled(Organise(positions, times, ratio, FollowShape.Value, Shape.Value, Spacing.Value == SpacingSource.DistanceSnap ? distanceSnap : null), Wiggle.Value);
         }
 
         /// <param name="positions">Object positions, in time order.</param>

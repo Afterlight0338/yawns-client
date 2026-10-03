@@ -207,8 +207,8 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.EditorAutoSeekOnPlacement, true);
             SetDefault(OsuSetting.EditorLimitedDistanceSnap, false);
             SetDefault(OsuSetting.EditorShowSpeedChanges, false);
-            SetDefault(OsuSetting.EditorScaleOrigin, EditorOrigin.GridCentre);
-            SetDefault(OsuSetting.EditorRotationOrigin, EditorOrigin.GridCentre);
+            SetDefault(OsuSetting.EditorScaleOrigin, EditorOrigin.SelectionCentre); // YAWNS: selection centre by default
+            SetDefault(OsuSetting.EditorRotationOrigin, EditorOrigin.SelectionCentre); // YAWNS
             SetDefault(OsuSetting.EditorAdjustExistingObjectsOnTimingChanges, true);
 
             SetDefault(OsuSetting.HideCountryFlags, false);

@@ -31,5 +31,9 @@ namespace osu.Game.Screens.Edit
         // YAWNS: Hitsound Studio's lanes, on a hitsound difficulty.
         [Description("hitsounds")]
         Hitsounds,
+
+        // YAWNS: explains every YAWNS feature, with diagrams.
+        [Description("tutorial")]
+        Tutorial,
     }
 }

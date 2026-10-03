@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Graphics;
 using osu.Framework.Input.Events;
 using osu.Game.Configuration;
 using osu.Game.Rulesets.Edit;
@@ -14,6 +15,7 @@ using osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders;
 using osu.Game.Rulesets.Osu.Edit.Blueprints.Spinners;
 using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Screens.Edit.Compose.Components;
+using osu.Game.Screens.Edit.MappingTools;
 using osuTK;
 
 namespace osu.Game.Rulesets.Osu.Edit
@@ -35,6 +37,11 @@ namespace osu.Game.Rulesets.Osu.Edit
             limitedDistanceSnap = config.GetBindable<bool>(OsuSetting.EditorLimitedDistanceSnap);
         }
 
+        /// <summary>
+        /// YAWNS: adds a drawable above the blueprints (the radial guide handle).
+        /// </summary>
+        public void AddOverlay(Drawable drawable) => AddInternal(drawable);
+
         protected override SelectionHandler<HitObject> CreateSelectionHandler() => new OsuSelectionHandler();
 
         public override HitObjectSelectionBlueprint? CreateHitObjectBlueprintFor(HitObject hitObject)
@@ -54,9 +61,28 @@ namespace osu.Game.Rulesets.Osu.Edit
             return base.CreateHitObjectBlueprintFor(hitObject);
         }
 
+        // ponytail: the tilt is re-detected at most once a second while dragging, it only changes when sliders do.
+        private double cachedTilt = AxisFinder.DEFAULT_TILT;
+        private double cachedTiltTime = double.MinValue;
+
+        private double axisTilt()
+        {
+            if (Time.Current - cachedTiltTime > 1000)
+            {
+                cachedTilt = AxisFinder.DetectTilt(Beatmap.HitObjects) ?? AxisFinder.DEFAULT_TILT;
+                cachedTiltTime = Time.Current;
+            }
+
+            return cachedTilt;
+        }
+
         protected override bool TryMoveBlueprints(DragEvent e, IList<(SelectionBlueprint<HitObject> blueprint, Vector2[] originalSnapPositions)> blueprints)
         {
             Vector2 distanceTravelled = e.ScreenSpaceMousePosition - e.ScreenSpaceMouseDownPosition;
+
+            // YAWNS: Ctrl+Alt while dragging keeps the drag on the nearest of the map's base axes.
+            if (e.ControlPressed && e.AltPressed)
+                distanceTravelled = AxisFinder.ProjectOntoNearestAxis(distanceTravelled, axisTilt());
 
             for (int i = 0; i < blueprints.Count; i++)
             {

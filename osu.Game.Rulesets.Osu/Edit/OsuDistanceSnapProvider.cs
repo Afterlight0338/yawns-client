@@ -3,7 +3,10 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using osu.Framework.Allocation;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Input.Bindings;
+using osu.Framework.Input.Events;
 using osu.Game.Graphics;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Input.Bindings;
@@ -12,6 +15,7 @@ using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
 using osu.Game.Rulesets.Osu.Beatmaps;
 using osu.Game.Rulesets.Osu.Objects;
+using osu.Game.Screens.Edit;
 using osu.Game.Screens.Edit.Components.TernaryButtons;
 using osuTK;
 
@@ -32,6 +36,33 @@ namespace osu.Game.Rulesets.Osu.Edit
             float actualDistance = Vector2.Distance(((OsuHitObject)before).StackedEndPosition, ((OsuHitObject)after).StackedPosition);
 
             return actualDistance / expectedDistance;
+        }
+
+        // YAWNS: sets the distance spacing so it continues the distance between an object and the one before it
+        // (the selected object, or the last one at or before the current time). Unbound by default.
+        [Resolved]
+        private EditorClock editorClock { get; set; } = null!;
+
+        public override bool OnPressed(KeyBindingPressEvent<GlobalAction> e) =>
+            e.Action == GlobalAction.EditorContinueDistanceSnap && !e.Repeat ? ContinueDistanceSnap() : base.OnPressed(e);
+
+        public bool ContinueDistanceSnap()
+        {
+            var after = EditorBeatmap.SelectedHitObjects.OrderBy(h => h.StartTime).LastOrDefault()
+                        ?? EditorBeatmap.HitObjects.LastOrDefault(h => h.StartTime <= editorClock.CurrentTime);
+            var before = after == null ? null : EditorBeatmap.HitObjects.TakeWhile(h => h != after).LastOrDefault();
+
+            if (after == null || before == null)
+                return false;
+
+            double spacing = ReadCurrentDistanceSnap(before, after);
+
+            if (spacing <= 0)
+                return false;
+
+            DistanceSpacingMultiplier.Value = System.Math.Round(spacing, 2);
+            DistanceSnapToggle.Value = TernaryState.True;
+            return true;
         }
 
         protected override bool AdjustDistanceSpacing(GlobalAction action, float amount)

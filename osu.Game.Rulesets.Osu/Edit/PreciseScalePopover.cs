@@ -74,14 +74,20 @@ namespace osu.Game.Rulesets.Osu.Edit
                         Caption = "Scale",
                         Current = scaleInputBindable = new BindableNumber<float>
                         {
-                            MinValue = 0.05f,
-                            MaxValue = 2,
+                            MinValue = -5, // YAWNS: any amount, negative flips
+                            MaxValue = 5, // YAWNS
                             Precision = 0.001f,
                             Value = 1,
                             Default = 1,
                         },
                         KeyboardStep = 0.01f,
                         TabbableContentContainer = this
+                    },
+                    new FormEnumDropdown<OsuSelectionScaleHandler.SliderScaling>
+                    {
+                        Caption = "Sliders in a group",
+                        HintText = "Several objects: keep slider shapes, scale them with the layout, or scale them and adjust SV so durations stay.",
+                        Current = scaleHandler.Sliders,
                     },
                     scaleOrigin = new EditorRadioButtonCollection
                     {

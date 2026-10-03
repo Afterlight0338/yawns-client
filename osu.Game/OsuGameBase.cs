@@ -87,7 +87,7 @@ namespace osu.Game
         /// YAWNS: its own version, shown in the window title and settings. The assembly version stays 0.0.0 so lazer's release-only
         /// behaviour (crash reports, update checks, writing the version into the settings it shares with lazer) stays off.
         /// </summary>
-        public const string YAWNS_VERSION = "6769.001";
+        public const string YAWNS_VERSION = "6769.002";
 
         /// <summary>
         /// YAWNS: the lazer release this build is merged from. The library is shared with lazer, so its last-run version must match.

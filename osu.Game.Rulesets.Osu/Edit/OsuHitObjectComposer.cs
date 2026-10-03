@@ -128,6 +128,9 @@ namespace osu.Game.Rulesets.Osu.Edit
             var axisGuide = new AxisGuide();
             LayerBelowRuleset.Add(axisGuide);
             MappingToolboxGroup.AxisGuide = axisGuide;
+            LayerBelowRuleset.Add(new FlipGuide(MappingToolboxGroup.AngledFlip));
+            LayerBelowRuleset.Add(new RadialGuideOverlay(MappingToolboxGroup.RadialGuide));
+            ((OsuBlueprintContainer)BlueprintContainer).AddOverlay(new RadialGuideHandle(MappingToolboxGroup.RadialGuide));
 
             // YAWNS: Snapping Tools' virtual objects, also under the objects.
             LayerBelowRuleset.Add(snappingTools = new SnappingToolsOverlay());
@@ -294,8 +297,8 @@ namespace osu.Game.Rulesets.Osu.Edit
             var playfield = PlayfieldAtScreenSpacePosition(screenSpacePosition);
             (Vector2 pos, double time) = distanceSnapGrid.GetSnappedPosition(distanceSnapGrid.ToLocalSpace(screenSpacePosition), fixedTime);
 
-            if (pos.X < 0 || pos.X > OsuPlayfield.BASE_SIZE.X || pos.Y < 0 || pos.Y > OsuPlayfield.BASE_SIZE.Y)
-                return null;
+            // YAWNS: a snapped position off the playfield goes to the nearest place on its edge instead of not snapping at all.
+            pos = Vector2.Clamp(pos, Vector2.Zero, OsuPlayfield.BASE_SIZE);
 
             return new SnapResult(distanceSnapGrid.ToScreenSpace(pos), time, playfield);
         }
@@ -359,6 +362,13 @@ namespace osu.Game.Rulesets.Osu.Edit
             if (snappingTools?.TrySnap(snappingTools.ToLocalSpace(screenSpacePosition)) is Vector2 virtualPosition)
             {
                 snapResult = new SnapResult(snappingTools.ToScreenSpace(virtualPosition), null, playfield);
+                return true;
+            }
+
+            // YAWNS: and the radial guide.
+            if (MappingToolboxGroup.RadialGuide.Snap(snappingTools.ToLocalSpace(screenSpacePosition), SnappingToolsOverlay.SNAP_RADIUS) is Vector2 guidePosition)
+            {
+                snapResult = new SnapResult(snappingTools.ToScreenSpace(guidePosition), null, playfield);
                 return true;
             }
 

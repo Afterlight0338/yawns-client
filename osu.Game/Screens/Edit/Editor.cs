@@ -1185,6 +1185,10 @@ namespace osu.Game.Screens.Edit
                         currentScreen = new ToolsScreen();
                         break;
 
+                    case EditorScreenMode.Tutorial:
+                        currentScreen = new Screens.Edit.MappingTools.Tutorial.TutorialScreen();
+                        break;
+
                     case EditorScreenMode.Hitsounds:
                         currentScreen = new Screens.Edit.MappingTools.Hitsounds.HitsoundsScreen();
                         break;

@@ -43,6 +43,7 @@ namespace osu.Game.Rulesets.Osu.Edit
         private readonly Bindable<StreamOrganiser.ShapeMode> shape = new Bindable<StreamOrganiser.ShapeMode>();
         private readonly Bindable<StreamOrganiser.SpacingSource> spacing = new Bindable<StreamOrganiser.SpacingSource>();
         private readonly BindableDouble strength = new BindableDouble();
+        private readonly BindableDouble wiggle = new BindableDouble(); // YAWNS
         private readonly BindableDouble followShape = new BindableDouble();
 
         public StreamOrganiserPopover(StreamOrganiser organiser)
@@ -94,6 +95,13 @@ namespace osu.Game.Rulesets.Osu.Edit
                         Current = organiser.Strength,
                         TabbableContentContainer = this,
                     },
+                    new FormSliderBar<double>
+                    {
+                        Caption = "Wiggle (px)",
+                        HintText = "Every other object moves this far to alternating sides of the stream line, for wiggle streams. 0 is off.",
+                        Current = organiser.Wiggle,
+                        TabbableContentContainer = this,
+                    },
                 }
             };
         }
@@ -106,6 +114,7 @@ namespace osu.Game.Rulesets.Osu.Edit
             shape.BindTo(organiser.Shape);
             spacing.BindTo(organiser.Spacing);
             strength.BindTo(organiser.Strength);
+            wiggle.BindTo(organiser.Wiggle);
             followShape.BindTo(organiser.FollowShape);
 
             speed.BindValueChanged(s =>
@@ -120,6 +129,7 @@ namespace osu.Game.Rulesets.Osu.Edit
             }, true);
             spacing.BindValueChanged(_ => apply());
             strength.BindValueChanged(_ => apply());
+            wiggle.BindValueChanged(_ => apply());
             followShape.BindValueChanged(_ => apply());
         }
 

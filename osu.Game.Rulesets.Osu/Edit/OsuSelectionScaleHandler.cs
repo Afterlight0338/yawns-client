@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using osu.Framework.Allocation;
@@ -34,6 +35,23 @@ namespace osu.Game.Rulesets.Osu.Edit
         /// Whether a single slider is currently selected, which results in a different scaling behaviour.
         /// </summary>
         public Bindable<bool> IsScalingSlider { get; private set; } = new BindableBool();
+
+        /// <summary>
+        /// YAWNS: what scaling a selection of several objects does to the sliders in it.
+        /// </summary>
+        public enum SliderScaling
+        {
+            [Description("Keep shapes (move heads only)")]
+            KeepShapes,
+
+            [Description("Scale shapes")]
+            ScaleShapes,
+
+            [Description("Scale shapes, adjust SV (keep duration)")]
+            ScaleShapesAdjustSpeed,
+        }
+
+        public readonly Bindable<SliderScaling> Sliders = new Bindable<SliderScaling>();
 
         [Resolved]
         private IEditorChangeHandler? changeHandler { get; set; }
@@ -81,6 +99,7 @@ namespace osu.Game.Rulesets.Osu.Edit
         private Dictionary<OsuHitObject, OriginalHitObjectState>? objectsInScale;
         private Vector2? defaultOrigin;
         private List<Vector2>? originalConvexHull;
+        private Dictionary<Slider, (double Distance, double Velocity)>? originalSliders; // YAWNS
 
         public override void Begin()
         {
@@ -94,6 +113,7 @@ namespace osu.Game.Rulesets.Osu.Edit
             objectsInScale = selectedMovableObjects.ToDictionary(ho => ho, ho => new OriginalHitObjectState(ho));
             OriginalSurroundingQuad = GeometryUtils.GetSurroundingQuad(objectsInScale.Keys);
             originalConvexHull = GeometryUtils.GetConvexHull(objectsInScale.Keys);
+            originalSliders = objectsInScale.Keys.OfType<Slider>().ToDictionary(s => s, s => (s.Path.Distance, s.SliderVelocityMultiplier)); // YAWNS
             defaultOrigin = GeometryUtils.MinimumEnclosingCircle(originalConvexHull).Item1;
         }
 
@@ -121,6 +141,10 @@ namespace osu.Game.Rulesets.Osu.Edit
                 foreach (var (ho, originalState) in objectsInScale)
                 {
                     ho.Position = GeometryUtils.GetScaledPosition(scale, actualOrigin, originalState.Position, axisRotation);
+
+                    // YAWNS: optionally scale slider shapes too (lazer only moves the heads of a group).
+                    if (Sliders.Value != SliderScaling.KeepShapes && ho is Slider groupSlider)
+                        scaleSliderShape(groupSlider, originalState, scale, axisRotation);
                 }
             }
 
@@ -137,6 +161,7 @@ namespace osu.Game.Rulesets.Osu.Edit
             base.Commit();
 
             objectsInScale = null;
+            originalSliders = null; // YAWNS
             OriginalSurroundingQuad = null;
             defaultOrigin = null;
         }
@@ -197,6 +222,24 @@ namespace osu.Game.Rulesets.Osu.Edit
 
             // Snap the slider's length again to undo the potentially-invalid length applied by the previous snap.
             slider.SnapTo(snapProvider);
+        }
+
+        // YAWNS: ponytail: the path length follows the geometric mean of the two scale factors, exact for uniform scaling, close for a stretch.
+        private void scaleSliderShape(Slider slider, OriginalHitObjectState originalInfo, Vector2 scale, float axisRotation)
+        {
+            Debug.Assert(originalInfo.PathControlPointPositions != null && originalInfo.PathControlPointTypes != null && originalSliders != null);
+
+            (double distance, double velocity) = originalSliders[slider];
+            float factor = MathF.Sqrt(MathF.Abs(scale.X * scale.Y));
+
+            for (int i = 0; i < slider.Path.ControlPoints.Count; i++)
+            {
+                slider.Path.ControlPoints[i].Position = GeometryUtils.GetScaledPosition(scale, Vector2.Zero, originalInfo.PathControlPointPositions[i], axisRotation);
+                slider.Path.ControlPoints[i].Type = originalInfo.PathControlPointTypes[i];
+            }
+
+            slider.Path.ExpectedDistance.Value = distance * factor;
+            slider.SliderVelocityMultiplier = Sliders.Value == SliderScaling.ScaleShapesAdjustSpeed ? Math.Clamp(velocity * factor, 0.1, 10) : velocity;
         }
 
         private (bool X, bool Y) isQuadInBounds(Quad quad)

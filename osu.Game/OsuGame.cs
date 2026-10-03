@@ -1653,7 +1653,7 @@ namespace osu.Game
                     return true;
 
                 case GlobalAction.NextSkin:
-                    if (skinEditor.State.Value == Visibility.Visible)
+                    if (skinEditor.State.Value == Visibility.Visible || ScreenStack.CurrentScreen is Editor) // YAWNS: Ctrl+Shift+T is the editor's angled flip
                         return false;
 
                     SkinManager.SelectNextSkin();

@@ -1,16 +1,19 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Primitives;
 using osu.Framework.Graphics.UserInterface;
+using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Utils;
 using osu.Game.Extensions;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Input.Bindings;
 using osu.Game.Rulesets.Edit;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
@@ -46,6 +49,32 @@ namespace osu.Game.Rulesets.Osu.Edit
 
         private bool nudgeMovementActive;
 
+        // YAWNS: Ctrl+Shift+T (rebindable) opens the angled flip.
+        public override bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
+        {
+            if (e.Action == GlobalAction.EditorAngledFlip && !e.Repeat && mappingTools != null)
+            {
+                mappingTools.ShowAngledFlip();
+                return true;
+            }
+
+            if (mappingTools != null && !e.Repeat)
+            {
+                switch (e.Action)
+                {
+                    case GlobalAction.EditorQuickRotateClockwise:
+                        mappingTools.QuickRotate(1);
+                        return true;
+
+                    case GlobalAction.EditorQuickRotateAnticlockwise:
+                        mappingTools.QuickRotate(-1);
+                        return true;
+                }
+            }
+
+            return base.OnPressed(e);
+        }
+
         protected override bool OnKeyDown(KeyDownEvent e)
         {
             if (e.Key == Key.M && e.ControlPressed && e.ShiftPressed)
@@ -53,6 +82,13 @@ namespace osu.Game.Rulesets.Osu.Edit
                 mergeSelection();
                 return true;
             }
+
+            // YAWNS: [ and ] step the slider velocity of the selected sliders (Ctrl 0.25, Alt 0.01), \ restores the velocity of the slider before them.
+            if (!e.ShiftPressed && (e.Key == Key.BracketLeft || e.Key == Key.BracketRight))
+                return stepSliderVelocity((e.Key == Key.BracketRight ? 1 : -1) * (e.ControlPressed ? 0.25 : e.AltPressed ? 0.01 : 0.1));
+
+            if (!e.ShiftPressed && !e.ControlPressed && !e.AltPressed && e.Key == Key.BackSlash)
+                return restorePreviousSliderVelocity();
 
             // Until the keys below are global actions, this will prevent conflicts with "seek between sample points"
             // which has a default of ctrl+shift+arrows.
@@ -78,6 +114,50 @@ namespace osu.Game.Rulesets.Osu.Edit
             }
 
             return false;
+        }
+
+        private bool stepSliderVelocity(double step)
+        {
+            var sliders = EditorBeatmap.SelectedHitObjects.OfType<Slider>().ToArray();
+
+            if (sliders.Length == 0)
+                return false;
+
+            EditorBeatmap.BeginChange();
+
+            foreach (var slider in sliders)
+            {
+                var bindable = slider.SliderVelocityMultiplierBindable;
+                slider.SliderVelocityMultiplier = Math.Clamp(Math.Round(slider.SliderVelocityMultiplier + step, 2), bindable.MinValue, bindable.MaxValue);
+                EditorBeatmap.Update(slider);
+            }
+
+            EditorBeatmap.EndChange();
+            return true;
+        }
+
+        private bool restorePreviousSliderVelocity()
+        {
+            var sliders = EditorBeatmap.SelectedHitObjects.OfType<Slider>().ToArray();
+            var others = EditorBeatmap.HitObjects.OfType<Slider>().Where(s => !EditorBeatmap.SelectedHitObjects.Contains(s)).ToArray();
+            bool changed = false;
+
+            EditorBeatmap.BeginChange();
+
+            foreach (var slider in sliders)
+            {
+                var previous = others.LastOrDefault(s => s.StartTime < slider.StartTime);
+
+                if (previous == null || previous.SliderVelocityMultiplier == slider.SliderVelocityMultiplier)
+                    continue;
+
+                slider.SliderVelocityMultiplier = previous.SliderVelocityMultiplier;
+                EditorBeatmap.Update(slider);
+                changed = true;
+            }
+
+            EditorBeatmap.EndChange();
+            return changed;
         }
 
         protected override void OnKeyUp(KeyUpEvent e)
@@ -402,7 +482,15 @@ namespace osu.Game.Rulesets.Osu.Edit
                         {
                             Action = { Disabled = !mappingTools.CanAlignToAxis.Value },
                         },
-                        new OsuMenuItem("Radial copy (360/n)...", MenuItemType.Standard, mappingTools.ShowRadialCopy)
+                        new OsuMenuItem("Radial copy (360/n, stars, spirals)...", MenuItemType.Standard, mappingTools.ShowRadialCopy)
+                        {
+                            Action = { Disabled = !mappingTools.CanSavePattern.Value },
+                        },
+                        new OsuMenuItem("Perfect it (polygon, symmetry, mirror)...", MenuItemType.Standard, mappingTools.ShowPerfectIt)
+                        {
+                            Action = { Disabled = !mappingTools.CanSavePattern.Value },
+                        },
+                        new OsuMenuItem("Angled flip...", MenuItemType.Standard, mappingTools.ShowAngledFlip)
                         {
                             Action = { Disabled = !mappingTools.CanSavePattern.Value },
                         },

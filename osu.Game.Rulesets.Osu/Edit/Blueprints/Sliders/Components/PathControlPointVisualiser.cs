@@ -28,6 +28,7 @@ using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
 using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Screens.Edit;
+using osu.Game.Screens.Edit.MappingTools;
 using osuTK;
 using osuTK.Input;
 
@@ -198,6 +199,46 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders.Components
             return true;
         }
 
+        /// <summary>
+        /// YAWNS: degree elevation of the Bezier segment of the selected control point: one more control point, the same curve.
+        /// A perfect curve segment is turned into a Bezier first (its shape changes), other curve types are left alone.
+        /// </summary>
+        private bool increaseDegree()
+        {
+            var selected = Pieces.FirstOrDefault(p => p.IsSelected.Value)?.ControlPoint;
+
+            if (selected == null)
+                return false;
+
+            var segment = hitObject.Path.PointsInSegment(selected);
+            PathType? type = segment.FirstOrDefault()?.Type;
+
+            if (segment.Count < 2 || (type != PathType.BEZIER && type != PathType.PERFECT_CURVE))
+                return false;
+
+            changeHandler?.BeginChange();
+
+            double originalDistance = hitObject.Path.Distance;
+            segment[0].Type = PathType.BEZIER;
+
+            var elevated = BezierTools.ElevateDegree(segment.Select(p => p.Position).ToArray());
+
+            for (int i = 1; i < segment.Count - 1; i++)
+                segment[i].Position = elevated[i];
+
+            var added = new PathControlPoint(elevated[segment.Count - 1]);
+            hitObject.Path.ControlPoints.Insert(hitObject.Path.ControlPoints.IndexOf(segment[^1]), added);
+
+            // The curve is the same, so the length is too. A converted perfect curve is a different shape, so its length is kept by the path itself.
+            hitObject.Path.ExpectedDistance.Value = originalDistance;
+
+            changeHandler?.EndChange();
+
+            // Pieces are re-used, so select the new point once its piece exists.
+            Schedule(() => SetSelectionTo(added));
+            return true;
+        }
+
         private bool isSplittable(PathControlPointPiece<T> p) =>
             // A hit object can only be split on control points which connect two different path segments.
             p.ControlPoint.Type.HasValue && p.ControlPoint != controlPoints.FirstOrDefault() && p.ControlPoint != controlPoints.LastOrDefault();
@@ -321,6 +362,9 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders.Components
 
                     return true;
                 }
+
+                case Key.I when !e.ControlPressed && !e.AltPressed && !e.ShiftPressed: // YAWNS
+                    return increaseDegree();
 
                 case Key.Number1:
                 case Key.Number2:
@@ -569,6 +613,8 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders.Components
                         Items = curveTypeItems
                     }
                 };
+
+                menuItems.Add(new OsuMenuItem("Increase Bezier degree (I): one more point, same curve", MenuItemType.Standard, () => increaseDegree())); // YAWNS
 
                 if (splittableCount > 0)
                 {
