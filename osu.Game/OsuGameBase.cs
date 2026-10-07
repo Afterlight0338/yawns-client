@@ -87,11 +87,11 @@ namespace osu.Game
         /// YAWNS: its own version, shown in the window title and settings. The assembly version stays 0.0.0 so lazer's release-only
         /// behaviour (crash reports, update checks, writing the version into the settings it shares with lazer) stays off.
         /// </summary>
-        public const string YAWNS_VERSION = "6769.002";
+        public const string YAWNS_VERSION = "6769.003";
 
         /// <summary>
-        /// YAWNS: the lazer release this build is merged from. The library is shared with lazer, so its last-run version must match.
-        /// Update after merging a newer lazer release (run.sh reads it from here).
+        /// YAWNS: the lazer release this build is merged from (informational). Other lazer releases work as long as their database
+        /// structure is the same, <see cref="Database.RealmAccess.RefuseSchemaChanges"/> refuses to start otherwise.
         /// </summary>
         public const string LAZER_VERSION = "2026.921.0-lazer";
 
@@ -267,6 +267,13 @@ namespace osu.Game
         /// </remarks>
         protected virtual int UnhandledExceptionsBeforeCrash => DebugUtils.IsDebugBuild ? 0 : 1;
 
+        /// <summary>
+        /// YAWNS: called before startup aborts because lazer's library has a different database structure.
+        /// </summary>
+        protected virtual void OnSharedLibraryMismatch(SharedLibraryMismatchException e)
+        {
+        }
+
         public OsuGameBase()
         {
             Name = GAME_NAME;
@@ -293,7 +300,17 @@ namespace osu.Game
             Resources.AddStore(new DllResourceStore(typeof(OsuGameBase).Assembly));
             Resources.AddStore(new DllResourceStore(OsuResources.ResourceAssembly));
 
-            dependencies.Cache(realm = new RealmAccess(Storage, CLIENT_DATABASE_FILENAME, Host.UpdateThread));
+            try
+            {
+                realm = new RealmAccess(Storage, CLIENT_DATABASE_FILENAME, Host.UpdateThread);
+            }
+            catch (SharedLibraryMismatchException e)
+            {
+                OnSharedLibraryMismatch(e); // YAWNS
+                throw;
+            }
+
+            dependencies.Cache(realm);
 
             dependencies.CacheAs<RulesetStore>(RulesetStore = new RealmRulesetStore(realm, Storage));
             dependencies.CacheAs<IRulesetStore>(RulesetStore);

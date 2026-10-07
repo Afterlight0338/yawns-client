@@ -346,6 +346,18 @@ namespace osu.Game.Database
             }
             catch (Exception e)
             {
+                // YAWNS: the library is shared with lazer. Never back it up and start fresh, never migrate it: refuse to start instead.
+                if (RefuseSchemaChanges && !e.Message.StartsWith("SetEndOfFile() failed", StringComparison.Ordinal))
+                {
+                    string reason = e.Message.StartsWith(@"Provided schema version", StringComparison.Ordinal)
+                        ? $"Your lazer library uses a newer database structure than this YAWNS (structure {schema_version}). Update YAWNS to a release built for your lazer."
+                        : refusedMigrationFrom != null
+                            ? $"Your lazer library uses an older database structure ({refusedMigrationFrom}) than this YAWNS ({schema_version}). Update lazer and run it once first."
+                            : $"Your lazer library could not be opened ({e.Message}). Open it with lazer once to check it.";
+
+                    throw new SharedLibraryMismatchException(reason, e);
+                }
+
                 // See https://github.com/realm/realm-core/blob/master/src%2Frealm%2Fobject-store%2Fobject_store.cpp#L1016-L1022
                 // This is the best way we can detect a schema version downgrade.
                 if (e.Message.StartsWith(@"Provided schema version", StringComparison.Ordinal))
@@ -826,8 +838,21 @@ namespace osu.Game.Database
             };
         }
 
+        /// <summary>
+        /// YAWNS: refuse to migrate or replace the database, since it is lazer's own library. Off in debug builds (they use a separate storage).
+        /// </summary>
+        public static bool RefuseSchemaChanges = !DebugUtils.IsDebugBuild;
+
+        private ulong? refusedMigrationFrom;
+
         private void onMigration(Migration migration, ulong lastSchemaVersion)
         {
+            if (RefuseSchemaChanges)
+            {
+                refusedMigrationFrom = lastSchemaVersion;
+                throw new InvalidOperationException($"YAWNS refuses to migrate the shared database from schema {lastSchemaVersion} to {schema_version}.");
+            }
+
             for (ulong i = lastSchemaVersion + 1; i <= schema_version; i++)
                 applyMigrationsForVersion(migration, i);
         }
@@ -1527,6 +1552,17 @@ namespace osu.Game.Database
 
                 isDisposed = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// YAWNS: lazer's library could not be opened without changing its database structure.
+    /// </summary>
+    public class SharedLibraryMismatchException : Exception
+    {
+        public SharedLibraryMismatchException(string message, Exception inner)
+            : base(message, inner)
+        {
         }
     }
 }

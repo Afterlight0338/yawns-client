@@ -11,6 +11,7 @@ using osu.Framework.Utils;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
+using osu.Game.Database;
 using osu.Game.IO.Serialization;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Edit;
@@ -63,6 +64,29 @@ namespace osu.Game.Tests.Visual.Editing
             AddStep("set opacity", () => reference.Opacity.Value = 0.25f);
             AddAssert("layer faded", () => layer.Alpha, () => Is.EqualTo(0.25f));
         }
+
+        [Test]
+        public void TestOverlaySkin()
+        {
+            FormDropdown<Live<SkinInfo>> dropdown = null!;
+
+            AddAssert("same skin by default", () => !overlaySkinSources().Any());
+
+            AddStep("open map picker", () => toolButton("Map").TriggerClick());
+            AddUntilStep("skin dropdown shown", () => (dropdown = Editor.ChildrenOfType<FormDropdown<Live<SkinInfo>>>().SingleOrDefault()!) != null);
+            AddAssert("same as editor listed first", () => dropdown.Items.First(), () => Is.EqualTo(EditorReferenceBeatmap.SAME_AS_EDITOR));
+            AddAssert("random skin not listed", () => dropdown.Items.All(s => s.ID != SkinInfo.RANDOM_SKIN));
+
+            AddStep("pick classic", () => dropdown.Current.Value = dropdown.Items.Single(s => s.ID == SkinInfo.CLASSIC_SKIN));
+            AddUntilStep("overlay drawn with classic", () => overlaySkinSources().SingleOrDefault()?.AllSources.First() is DefaultLegacySkin);
+            AddUntilStep("reference displayed", () => layer.DrawableRuleset?.IsLoaded == true && layer.DrawableRuleset.Playfield.AllHitObjects.Any());
+
+            AddStep("switch back", () => reference.Skin.Value = EditorReferenceBeatmap.SAME_AS_EDITOR);
+            AddUntilStep("own skin chain gone", () => !overlaySkinSources().Any() && layer.DrawableRuleset?.IsLoaded == true);
+        }
+
+        // Skin containers inside the layer that do not fall back to the editor's skin.
+        private IEnumerable<SkinProvidingContainer> overlaySkinSources() => layer.ChildrenOfType<SkinProvidingContainer>().Where(s => s.GetType().Name == "OverlaySkinSource");
 
         [Test]
         public void TestReferencePlaysNoHitsounds()

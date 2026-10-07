@@ -6,8 +6,10 @@ using NUnit.Framework;
 using osu.Framework.Allocation;
 using osu.Framework.Extensions;
 using osu.Game.Beatmaps;
+using osu.Game.Database;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Osu;
+using osu.Game.Skinning;
 using osu.Game.Storyboards;
 using osu.Game.Tests.Beatmaps.IO;
 
@@ -48,16 +50,18 @@ namespace osu.Game.Tests.Visual.Editing
             AddAssert("three osu! difficulties", () => osuDifficulties, () => Has.Length.EqualTo(3));
 
             AddStep("reference Hard while editing Normal", () => Editor.ReferenceBeatmap.Load(osuDifficulties[1]));
-            AddStep("set offset and opacity", () =>
+            AddStep("set offset, opacity and skin", () =>
             {
                 Editor.ReferenceBeatmap.Offset.Value = 25;
                 Editor.ReferenceBeatmap.Opacity.Value = 0.6f;
+                Editor.ReferenceBeatmap.Skin.Value = TrianglesSkin.CreateInfo().ToLiveUnmanaged();
             });
 
             switchTo(2);
             AddUntilStep("reference is still Hard", () => referenceBeatmap(), () => Is.EqualTo(osuDifficulties[1]));
             AddAssert("offset kept", () => Editor.ReferenceBeatmap.Offset.Value, () => Is.EqualTo(25));
             AddAssert("opacity kept", () => Editor.ReferenceBeatmap.Opacity.Value, () => Is.EqualTo(0.6f));
+            AddAssert("skin kept", () => Editor.ReferenceBeatmap.Skin.Value.ID, () => Is.EqualTo(SkinInfo.TRIANGLES_SKIN));
 
             // Now editing Insane with Hard as reference. Switching to Hard swaps the reference to Insane.
             switchTo(1);

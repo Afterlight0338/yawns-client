@@ -17,6 +17,7 @@ using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Models;
 using osu.Game.Rulesets;
+using osu.Game.Skinning;
 using osuTK;
 using Realms;
 
@@ -41,6 +42,9 @@ namespace osu.Game.Screens.Edit.Reference
 
         [Resolved]
         private BeatmapManager beatmapManager { get; set; } = null!;
+
+        [Resolved]
+        private SkinManager skinManager { get; set; } = null!;
 
         private readonly Bindable<string> search = new Bindable<string>(string.Empty);
         private readonly Bindable<IBeatmap?> currentReference = new Bindable<IBeatmap?>();
@@ -80,6 +84,13 @@ namespace osu.Game.Screens.Edit.Reference
                         HintText = "Lines the overlay map up with yours. Positive moves it later, negative earlier.",
                         Current = reference.Offset,
                         TabbableContentContainer = this,
+                    },
+                    new FormDropdown<Live<SkinInfo>>
+                    {
+                        Caption = "Overlay skin",
+                        HintText = "Draw the overlay with another skin, so it is easy to tell apart from your objects.",
+                        Current = reference.Skin,
+                        Items = skinManager.GetAllUsableSkins().Where(s => s.ID != SkinInfo.RANDOM_SKIN).Prepend(EditorReferenceBeatmap.SAME_AS_EDITOR).ToList(),
                     },
                     new FormTextBox
                     {

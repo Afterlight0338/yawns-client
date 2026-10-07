@@ -104,7 +104,6 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
                 TailOverlay = CreateCircleOverlay(HitObject, SliderPosition.End),
             };
 
-            AddRangeInternal(ghostSegments); // YAWNS
             AddInternal(trueEnd);
 
             // tail will always have a non-null end drag marker.
@@ -392,7 +391,8 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
         private Vector2 directMouseStart;
 
         private const int ghost_segments = 48;
-        private readonly Box[] ghostSegments = Enumerable.Range(0, ghost_segments).Select(_ => new Box { Origin = Anchor.Centre, Colour = Colour4.Yellow, Alpha = 0, Height = 2 }).ToArray();
+        // YAWNS: created on first use, a whole-map selection has a blueprint per slider, and 48 idle boxes each cost a lot of frame time.
+        private Box[]? ghostSegments;
         private Vector2 ghostDrawnFor = new Vector2(float.NaN);
 
         // YAWNS: where the legacy last tick (the "true" slider end, 36 ms early or half the slider) is, drawn while the slider is selected.
@@ -406,12 +406,22 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
             Child = new Box { RelativeSizeAxes = Axes.Both, Alpha = 0, AlwaysPresent = true },
         };
 
+        private (Vector2, int, double, double) trueEndDrawnFor;
+
         private void updateTrueEnd()
         {
             trueEnd.Alpha = IsSelected ? 0.6f : 0;
 
             if (!IsSelected || HitObject.Duration <= 0)
                 return;
+
+            // Only when the slider changed: path evaluation for every selected slider every frame is slow on a whole-map selection.
+            var key = (HitObject.StackedPosition, pathVersion.Value, HitObject.Duration, HitObject.Radius);
+
+            if (key == trueEndDrawnFor)
+                return;
+
+            trueEndDrawnFor = key;
 
             double tickTime = Math.Max(HitObject.Duration / 2, HitObject.Duration - 36);
 
@@ -526,7 +536,7 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
             {
                 if (ghostDrawnFor.X is not float.NaN)
                 {
-                    foreach (var s in ghostSegments)
+                    foreach (var s in ghostSegments!)
                         s.Alpha = 0;
 
                     ghostDrawnFor = new Vector2(float.NaN);
@@ -541,6 +551,9 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
                 return;
 
             ghostDrawnFor = local;
+
+            if (ghostSegments == null)
+                AddRangeInternal(ghostSegments = Enumerable.Range(0, ghost_segments).Select(_ => new Box { Origin = Anchor.Centre, Colour = Colour4.Yellow, Alpha = 0, Height = 2 }).ToArray());
 
             var points = controlPoints.Select(p => p.Position).ToList();
             points.Insert(insertionIndexFor(local), local);

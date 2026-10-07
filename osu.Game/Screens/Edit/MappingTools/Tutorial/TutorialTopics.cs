@@ -218,12 +218,13 @@ namespace osu.Game.Screens.Edit.MappingTools.Tutorial
 
             // Streams and SV
             new TutorialTopic("Streams and SV", "Stream organiser",
-                "Cleans up a hand-placed stream of circles. They keep their times and the first position, and are moved onto a clean curve with even, accelerating or decelerating spacing.",
+                "Cleans up a hand-placed stream of circles. They keep their times and the first position, and are moved onto a clean curve with even, accelerating, decelerating or volume-following spacing.",
                 new[]
                 {
                     "Select three or more circles of a stream.",
                     "Open \"Organise stream...\". Shape: clean curve (your overall shape without the wobble), arc or straight line.",
                     "Spacing: fit between the ends, or follow distance snap. Speed: even, accelerate or decelerate, with a strength.",
+                    "Speed \"Follow volume\": louder parts get wider spacing and quieter parts tighter. \"Volume from\" picks the song's loudness at each object or the hitsound volume you set (green lines). Strength is how much wider the loudest gap is than the quietest.",
                     "Keep (or close) applies it as one undo step.",
                 },
                 "Right-click a selection, Tools, \"Organise stream...\".", TutorialDiagrams.StreamOrganiser),
@@ -294,7 +295,7 @@ namespace osu.Game.Screens.Edit.MappingTools.Tutorial
                 new[]
                 {
                     "Compose screen, the \"overlay\" section of the left toolbox: pick a map.",
-                    "Set the opacity and offset to line it up.",
+                    "Set the opacity and offset to line it up. Pick an overlay skin in the Map panel so the overlay looks different from your objects.",
                     "On the timeline's two lanes, drag to select a range of the overlay, then copy, insert, or overlay the pattern at the current time.",
                     "The Hitsound Copier and Timing Copier in the Tools tab work from the overlay map.",
                 },

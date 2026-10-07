@@ -18,6 +18,7 @@ using osu.Game.Updater;
 using osu.Desktop.Windows;
 using osu.Framework.Allocation;
 using osu.Game.Configuration;
+using osu.Game.Database;
 using osu.Game.IO;
 using osu.Game.IPC;
 using osu.Game.Performance;
@@ -150,22 +151,17 @@ namespace osu.Desktop
                 Add(new OsuWebSocketProvider());
         }
 
-        public override unsafe void SetHost(GameHost host)
+        // YAWNS: lazer's library could not be opened without changing its database structure, explain and quit.
+        protected override unsafe void OnSharedLibraryMismatch(SharedLibraryMismatchException e)
+        {
+            SDL.SDL3.SDL_ShowSimpleMessageBox(SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "YAWNS can't open your lazer library",
+                e.Message + "\n\nYAWNS shares lazer's library and never changes its database structure, so nothing was touched.", null);
+            Environment.Exit(1);
+        }
+
+        public override void SetHost(GameHost host)
         {
             base.SetHost(host);
-
-            // YAWNS: the library (database schema) is shared with lazer, so refuse to open it when lazer last ran a different release.
-            // This runs before the database opens; run.sh does the same check for source builds.
-            string lazerVersion = LocalConfig.Get<string>(OsuSetting.Version);
-
-            if (!string.IsNullOrEmpty(lazerVersion) && lazerVersion != LAZER_VERSION)
-            {
-                SDL.SDL3.SDL_ShowSimpleMessageBox(SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "YAWNS can't open your lazer library",
-                    $"Your osu!lazer last ran {lazerVersion}, but this YAWNS is built for lazer {LAZER_VERSION}.\n"
-                    + "YAWNS shares lazer's library and must match its version, otherwise it could damage the database.\n\n"
-                    + $"Get the YAWNS release built for lazer {lazerVersion}, or run lazer {LAZER_VERSION}.", null);
-                Environment.Exit(1);
-            }
 
             // Apple operating systems use a better icon provided via external assets.
             if (!RuntimeInfo.IsApple)

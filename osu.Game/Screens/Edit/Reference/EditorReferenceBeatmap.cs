@@ -7,9 +7,11 @@ using System.Linq;
 using osu.Framework.Bindables;
 using osu.Framework.Logging;
 using osu.Game.Beatmaps;
+using osu.Game.Database;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Screens.Edit.MappingTools;
+using osu.Game.Skinning;
 
 namespace osu.Game.Screens.Edit.Reference
 {
@@ -43,6 +45,13 @@ namespace osu.Game.Screens.Edit.Reference
             MaxValue = 1,
             Precision = 0.05f,
         };
+
+        /// <summary>
+        /// The skin the overlay is drawn with, so it can look different from the edited objects. <see cref="SAME_AS_EDITOR"/> uses the editor's skin.
+        /// </summary>
+        public readonly Bindable<Live<SkinInfo>> Skin = new Bindable<Live<SkinInfo>>(SAME_AS_EDITOR);
+
+        public static readonly Live<SkinInfo> SAME_AS_EDITOR = new SkinInfo { ID = Guid.Empty, Name = "Same as editor" }.ToLiveUnmanaged();
 
         /// <summary>
         /// When set, only the reference objects starting in this range (the reference's own time) are overlaid, placed by <see cref="PatternOffset"/>.
@@ -147,15 +156,17 @@ namespace osu.Game.Screens.Edit.Reference
         /// <param name="ShownAgainst">The beatmap that was being edited with it.</param>
         /// <param name="Offset">See <see cref="EditorReferenceBeatmap.Offset"/>.</param>
         /// <param name="Opacity">See <see cref="EditorReferenceBeatmap.Opacity"/>.</param>
-        public record ReferenceState(BeatmapInfo Beatmap, BeatmapInfo ShownAgainst, double Offset, float Opacity);
+        /// <param name="Skin">See <see cref="EditorReferenceBeatmap.Skin"/>.</param>
+        public record ReferenceState(BeatmapInfo Beatmap, BeatmapInfo ShownAgainst, double Offset, float Opacity, Live<SkinInfo> Skin);
 
         public ReferenceState? GetState(BeatmapInfo editing) =>
-            Beatmap.Value == null ? null : new ReferenceState(Beatmap.Value.BeatmapInfo, editing, Offset.Value, Opacity.Value);
+            Beatmap.Value == null ? null : new ReferenceState(Beatmap.Value.BeatmapInfo, editing, Offset.Value, Opacity.Value, Skin.Value);
 
         public void RestoreState(ReferenceState state, BeatmapInfo editing)
         {
             Offset.Value = state.Offset;
             Opacity.Value = state.Opacity;
+            Skin.Value = state.Skin;
 
             // Switching to the reference itself shows the previously edited difficulty instead, so spread comparisons work both ways.
             Load(state.Beatmap.Equals(editing) ? state.ShownAgainst : state.Beatmap);

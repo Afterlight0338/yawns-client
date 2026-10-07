@@ -4,6 +4,7 @@
 using System.Linq;
 using NUnit.Framework;
 using osu.Framework.Testing;
+using osu.Game.Audio;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Osu.Edit;
 using osu.Game.Rulesets.Osu.Objects;
@@ -60,6 +61,34 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
 
             AddStep("undo once", () => Editor.Undo());
             AddAssert("back to the hand-placed stream", () => stream.Select(h => h.X), () => Is.EqualTo(wobbly_x));
+        }
+
+        [Test]
+        public void TestFollowVolume()
+        {
+            AddStep("quiet hitsounds in the middle", () =>
+            {
+                for (int i = 0; i < stream.Length; i++)
+                    stream[i].Samples = new[] { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, volume: i is 2 or 3 ? 20 : 100) };
+            });
+            AddUntilStep("tool enabled", () => tools.CanOrganiseStream.Value);
+            AddStep("follow hitsound volume", () =>
+            {
+                tools.StreamOrganiser.Speed.Value = StreamOrganiser.SpeedMode.Volume;
+                tools.StreamOrganiser.VolumeFrom.Value = StreamOrganiser.VolumeSource.Hitsound;
+            });
+
+            AddStep("open organiser", () => tools.ShowStreamOrganiser());
+            AddUntilStep("popover shown", () => popover, () => Is.Not.Null);
+            AddUntilStep("quiet gap tightest", () =>
+            {
+                float[] g = gaps();
+                return g[2] < g[1] && g[2] < g[3] && near(g[0], g[4]);
+            });
+
+            // The test beatmap has no song: song loudness has nothing to follow, so the stream is even.
+            AddStep("follow song loudness", () => tools.StreamOrganiser.VolumeFrom.Value = StreamOrganiser.VolumeSource.Song);
+            AddUntilStep("evenly spaced", () => gaps().All(g => near(g, 20)));
         }
 
         [Test]

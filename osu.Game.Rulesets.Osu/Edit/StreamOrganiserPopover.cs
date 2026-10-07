@@ -6,6 +6,7 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Game.Beatmaps;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Rulesets.Edit;
 using osu.Game.Rulesets.Osu.Objects;
@@ -29,11 +30,17 @@ namespace osu.Game.Rulesets.Osu.Edit
         [Resolved]
         private IDistanceSnapProvider? distanceSnapProvider { get; set; }
 
+        [Resolved]
+        private IBindable<WorkingBeatmap> beatmap { get; set; } = null!;
+
         private HitCircle[] stream = null!;
         private Vector2[] originalPositions = null!;
         private double[] times = null!;
+        private double[]? hitsoundVolumes;
+        private double[]? songLoudness;
 
         private FormSliderBar<double> strengthSlider = null!;
+        private Drawable volumeSourceDropdown = null!;
         private FormSliderBar<double> followSlider = null!;
 
         private bool changeOpen;
@@ -42,6 +49,7 @@ namespace osu.Game.Rulesets.Osu.Edit
         private readonly Bindable<StreamOrganiser.SpeedMode> speed = new Bindable<StreamOrganiser.SpeedMode>();
         private readonly Bindable<StreamOrganiser.ShapeMode> shape = new Bindable<StreamOrganiser.ShapeMode>();
         private readonly Bindable<StreamOrganiser.SpacingSource> spacing = new Bindable<StreamOrganiser.SpacingSource>();
+        private readonly Bindable<StreamOrganiser.VolumeSource> volumeFrom = new Bindable<StreamOrganiser.VolumeSource>();
         private readonly BindableDouble strength = new BindableDouble();
         private readonly BindableDouble wiggle = new BindableDouble(); // YAWNS
         private readonly BindableDouble followShape = new BindableDouble();
@@ -86,7 +94,14 @@ namespace osu.Game.Rulesets.Osu.Edit
                     new FormEnumDropdown<StreamOrganiser.SpeedMode>
                     {
                         Caption = "Speed",
+                        HintText = "Follow volume: louder parts get wider spacing, quieter parts tighter, with the rhythm still setting the base spacing.",
                         Current = organiser.Speed,
+                    },
+                    volumeSourceDropdown = new FormEnumDropdown<StreamOrganiser.VolumeSource>
+                    {
+                        Caption = "Volume from",
+                        HintText = "For Follow volume. Song loudness: how loud the music is at each object. Hitsound volume: the volume you set on each object (green lines).",
+                        Current = organiser.VolumeFrom,
                     },
                     strengthSlider = new FormSliderBar<double>
                     {
@@ -113,6 +128,7 @@ namespace osu.Game.Rulesets.Osu.Edit
             speed.BindTo(organiser.Speed);
             shape.BindTo(organiser.Shape);
             spacing.BindTo(organiser.Spacing);
+            volumeFrom.BindTo(organiser.VolumeFrom);
             strength.BindTo(organiser.Strength);
             wiggle.BindTo(organiser.Wiggle);
             followShape.BindTo(organiser.FollowShape);
@@ -120,6 +136,7 @@ namespace osu.Game.Rulesets.Osu.Edit
             speed.BindValueChanged(s =>
             {
                 strengthSlider.Alpha = s.NewValue == StreamOrganiser.SpeedMode.Even ? 0.5f : 1;
+                volumeSourceDropdown.Alpha = s.NewValue == StreamOrganiser.SpeedMode.Volume ? 1 : 0.5f;
                 apply();
             }, true);
             shape.BindValueChanged(s =>
@@ -128,6 +145,7 @@ namespace osu.Game.Rulesets.Osu.Edit
                 apply();
             }, true);
             spacing.BindValueChanged(_ => apply());
+            volumeFrom.BindValueChanged(_ => apply());
             strength.BindValueChanged(_ => apply());
             wiggle.BindValueChanged(_ => apply());
             followShape.BindValueChanged(_ => apply());
@@ -140,6 +158,8 @@ namespace osu.Game.Rulesets.Osu.Edit
             stream = editorBeatmap.SelectedHitObjects.OfType<HitCircle>().OrderBy(h => h.StartTime).ToArray();
             originalPositions = stream.Select(h => h.Position).ToArray();
             times = stream.Select(h => h.StartTime).ToArray();
+            hitsoundVolumes = null;
+            songLoudness = null;
 
             editorBeatmap.BeginChange();
             changeOpen = true;
@@ -164,13 +184,30 @@ namespace osu.Game.Rulesets.Osu.Edit
 
             // Always from the original positions, so tweaking a setting back and forth is lossless.
             var positions = organiser.Organise(originalPositions, times,
-                distanceSnapProvider == null ? null : (start, duration) => distanceSnapProvider.DurationToDistance(duration, start));
+                distanceSnapProvider == null ? null : (start, duration) => distanceSnapProvider.DurationToDistance(duration, start),
+                volumes());
 
             for (int i = 0; i < stream.Length; i++)
             {
                 stream[i].Position = positions[i];
                 editorBeatmap.Update(stream[i]);
             }
+        }
+
+        /// <summary>
+        /// The volume at each object for <see cref="StreamOrganiser.SpeedMode.Volume"/>, worked out once per opening.
+        /// </summary>
+        private double[]? volumes()
+        {
+            if (organiser.Speed.Value != StreamOrganiser.SpeedMode.Volume)
+                return null;
+
+            if (organiser.VolumeFrom.Value == StreamOrganiser.VolumeSource.Hitsound)
+                return hitsoundVolumes ??= stream.Select(h => h.Samples.Count == 0 ? 100.0 : h.Samples.Max(s => s.Volume)).ToArray();
+
+            // ponytail: reads the whole waveform on the update thread the first time (the timeline has usually generated it already).
+            return songLoudness ??= StreamOrganiser.SongLoudness(times,
+                beatmap.Value.Waveform.GetPoints().Select(p => System.Math.Max(p.AmplitudeLeft, p.AmplitudeRight)).ToArray());
         }
     }
 }

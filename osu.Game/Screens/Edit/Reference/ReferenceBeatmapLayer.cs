@@ -2,7 +2,9 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
@@ -10,9 +12,11 @@ using osu.Framework.Logging;
 using osu.Framework.Timing;
 using osu.Game.Audio;
 using osu.Game.Beatmaps;
+using osu.Game.Database;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.UI;
+using osu.Game.Skinning;
 
 namespace osu.Game.Screens.Edit.Reference
 {
@@ -33,6 +37,10 @@ namespace osu.Game.Screens.Edit.Reference
         private readonly Bindable<(double Start, double End)?> pattern = new Bindable<(double Start, double End)?>();
         private readonly IBindable<double> offset;
         private readonly BindableFloat opacity = new BindableFloat();
+        private readonly Bindable<Live<SkinInfo>> skin = new Bindable<Live<SkinInfo>>();
+
+        [Resolved]
+        private SkinManager skinManager { get; set; } = null!;
 
         /// <summary>
         /// The reference currently shown (or loading), if any.
@@ -54,6 +62,7 @@ namespace osu.Game.Screens.Edit.Reference
             pattern.BindTo(reference.Pattern);
             offset = reference.DisplayOffset.GetBoundCopy();
             opacity.BindTo(reference.Opacity);
+            skin.BindTo(reference.Skin);
         }
 
         protected override void LoadComplete()
@@ -65,6 +74,7 @@ namespace osu.Game.Screens.Edit.Reference
             // Loading a new reference also resets the pattern, show once for both.
             beatmap.BindValueChanged(_ => Scheduler.AddOnce(show), true);
             pattern.BindValueChanged(_ => Scheduler.AddOnce(show));
+            skin.BindValueChanged(_ => Scheduler.AddOnce(show));
         }
 
         private void show()
@@ -103,10 +113,25 @@ namespace osu.Game.Screens.Edit.Reference
 
             DrawableRuleset = drawableRuleset;
 
-            LoadComponentAsync(drawableRuleset, loaded =>
+            Drawable content = drawableRuleset;
+
+            // Its own skin chain, so neither the editor skin nor the edited map's beatmap skin leaks into the overlay.
+            if (!skin.Value.Equals(EditorReferenceBeatmap.SAME_AS_EDITOR))
+            {
+                content = new OverlaySkinSource(skin.Value.PerformRead(skinManager.GetSkin), skinManager)
+                {
+                    Child = new RulesetSkinProvidingContainer(drawableRuleset.Ruleset, newBeatmap, null)
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Child = drawableRuleset,
+                    },
+                };
+            }
+
+            LoadComponentAsync(content, loaded =>
             {
                 // A different reference was picked while this one was loading.
-                if (loaded != DrawableRuleset)
+                if (drawableRuleset != DrawableRuleset)
                 {
                     loaded.Dispose();
                     return;
@@ -115,9 +140,9 @@ namespace osu.Game.Screens.Edit.Reference
                 AddInternal(loaded);
 
                 // Autoplay hits the reference objects so they animate like the edited ones.
-                var autoplay = loaded.Mods.OfType<ModAutoplay>().SingleOrDefault();
+                var autoplay = drawableRuleset.Mods.OfType<ModAutoplay>().SingleOrDefault();
                 if (autoplay != null)
-                    loaded.SetReplayScore(autoplay.CreateScoreFromReplayData(loaded.Beatmap, loaded.Mods));
+                    drawableRuleset.SetReplayScore(autoplay.CreateScoreFromReplayData(drawableRuleset.Beatmap, drawableRuleset.Mods));
             });
         }
 
@@ -139,5 +164,42 @@ namespace osu.Game.Screens.Edit.Reference
 
         // Only the edited beatmap should be heard. The interface is [Cached], so this covers every sample inside the layer.
         IBindable<bool> ISamplePlaybackDisabler.SamplePlaybackDisabled { get; } = new Bindable<bool>(true);
+
+        /// <summary>
+        /// The chosen skin with the same fallbacks as <see cref="SkinManager.AllSources"/>, and nothing from the parents.
+        /// </summary>
+        private partial class OverlaySkinSource : SkinProvidingContainer
+        {
+            private readonly List<Skin> owned = new List<Skin>();
+
+            protected override bool AllowFallingBackToParent => false;
+
+            public OverlaySkinSource(Skin skin, SkinManager skins)
+            {
+                owned.Add(skin);
+
+                var sources = new List<ISkin> { skin };
+
+                if (skin is LegacySkin)
+                    sources.Add(skins.DefaultClassicSkin);
+
+                if (skin is not TrianglesSkin)
+                {
+                    var triangles = new TrianglesSkin(skins);
+                    owned.Add(triangles);
+                    sources.Add(triangles);
+                }
+
+                SetSources(sources);
+            }
+
+            protected override void Dispose(bool isDisposing)
+            {
+                base.Dispose(isDisposing);
+
+                foreach (var s in owned)
+                    s.Dispose();
+            }
+        }
     }
 }

@@ -127,6 +127,57 @@ namespace osu.Game.Tests.Editing
         }
 
         [Test]
+        public void TestVolumeGapScale()
+        {
+            // Gap volumes 10, 30, 75: loudest gap 3 times the quietest, medium volume unscaled.
+            double[] scale = StreamOrganiser.VolumeGapScale(new double[] { 10, 10, 50, 100 }, 3);
+
+            Assert.That(scale[2] / scale[0], Is.EqualTo(3).Within(1e-9));
+            Assert.That(scale[0] * scale[2], Is.EqualTo(1).Within(1e-9));
+            Assert.That(scale[1], Is.GreaterThan(scale[0]).And.LessThan(scale[2]));
+
+            Assert.That(StreamOrganiser.VolumeGapScale(new double[] { 60, 60, 60 }, 3), Is.All.EqualTo(1));
+        }
+
+        [Test]
+        public void TestHitsoundVolumeDipTightensTheMiddle()
+        {
+            double[] scale = StreamOrganiser.VolumeGapScale(new double[] { 100, 100, 30, 30, 100, 100 }, 2);
+            double[] g = gaps(StreamOrganiser.Organise(wobbly_line, even_times, 1, 0.5, gapScale: scale));
+
+            Assert.That(g[2], Is.LessThan(g[1]).And.LessThan(g[3]));
+            Assert.That(g[0], Is.EqualTo(g[4]).Within(0.5));
+            Assert.That(g[0] / g[2], Is.EqualTo(2).Within(0.1));
+        }
+
+        [Test]
+        public void TestSongCrescendoAccelerates()
+        {
+            // The song gets louder over the stream (with a kick every 100 ms on top): the gaps should widen.
+            float[] amplitude = Enumerable.Range(0, 700).Select(t => 0.05f + t / 1000f + (t % 100 < 10 ? 0.3f : 0)).ToArray();
+            double[] loudness = StreamOrganiser.SongLoudness(even_times, amplitude);
+
+            for (int i = 1; i < loudness.Length; i++)
+                Assert.That(loudness[i], Is.GreaterThan(loudness[i - 1]));
+
+            var result = StreamOrganiser.Organise(wobbly_line, even_times, 1, 0.5, gapScale: StreamOrganiser.VolumeGapScale(loudness, 2));
+            double[] g = gaps(result);
+
+            for (int i = 1; i < g.Length; i++)
+                Assert.That(g[i], Is.GreaterThan(g[i - 1]));
+
+            Assert.That(g[^1] / g[0], Is.EqualTo(2).Within(0.1));
+            assertEndsPinned(wobbly_line, result);
+        }
+
+        [Test]
+        public void TestSilentSongStaysEven()
+        {
+            double[] loudness = StreamOrganiser.SongLoudness(even_times, new float[700]);
+            Assert.That(StreamOrganiser.VolumeGapScale(loudness, 3), Is.All.EqualTo(1));
+        }
+
+        [Test]
         public void TestCleanArcStaysPut()
         {
             // Evenly spaced points on a circle arc are already a clean stream.

@@ -5,7 +5,7 @@
 # using the normal lazer library in ~/.local/share/osu.
 #
 # The library is shared with the regular lazer install, so:
-# - YAWNS must be built from the same lazer release as the installed lazer (database schema), see LAZER_VERSION,
+# - YAWNS refuses to start if the installed lazer uses a different database structure (any lazer version is fine otherwise),
 # - only one of the two may run at a time.
 #
 # Taiko/catch/mania, mobile, macOS, tournament, benchmarks and templates are deleted from this fork.
@@ -16,8 +16,6 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 
 OUT=osu.Desktop/bin/publish
-# The lazer release YAWNS is built from (OsuGameBase.LAZER_VERSION).
-LAZER_VERSION=$(grep -oP 'LAZER_VERSION = "\K[^"]+' osu.Game/OsuGameBase.cs)
 DATA="$HOME/.local/share/osu"
 
 if [[ "${1:-}" == "--build" || ! -x "$OUT/yawns" ]]; then
@@ -29,15 +27,6 @@ fi
 
 if pgrep -x 'osu!' >/dev/null || pgrep -x yawns >/dev/null; then
     echo "lazer or YAWNS is already running. Close it first, both use the same library." >&2
-    exit 1
-fi
-
-# If the regular lazer has already run a newer release, its database may be newer than this build understands.
-# lazer would then move the library aside and start empty, so refuse instead.
-installed=$(sed -n 's/^Version = //p' "$DATA/game.ini" 2>/dev/null | tr -d '\r')
-if [[ -n "$installed" && "$installed" != "$LAZER_VERSION" ]]; then
-    echo "Your lazer last ran $installed, but YAWNS is built from lazer $LAZER_VERSION." >&2
-    echo "Update YAWNS to $installed first (merge that release, set LAZER_VERSION, then ./run.sh --build)." >&2
     exit 1
 fi
 

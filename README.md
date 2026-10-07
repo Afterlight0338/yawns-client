@@ -18,7 +18,7 @@ Details, how it is built and tested, and the roadmap: [YAWNS-NOTES.md](YAWNS-NOT
 
 YAWNS needs osu!lazer installed and opens the same library (beatmaps, skins, settings). So:
 
-- it must match your lazer version. Each YAWNS release says which lazer release it is built for, and it refuses to start if your lazer last ran a different one,
+- your lazer version does not have to match, but its database structure does. When a lazer update changes that structure, YAWNS refuses to start (and leaves your library untouched) until a matching YAWNS release is out,
 - close lazer before starting YAWNS, only one of the two may run at a time.
 
 **Download** (Releases page): `YAWNS-<version>-x86_64.AppImage` for Linux, `YAWNS-<version>-win-x64.zip` for Windows (unzip, run `yawns.exe`).

@@ -30,6 +30,18 @@ namespace osu.Game.Screens.Edit.MappingTools
 
             [Description("Decelerate")]
             Decelerate,
+
+            [Description("Follow volume")]
+            Volume,
+        }
+
+        public enum VolumeSource
+        {
+            [Description("Song loudness")]
+            Song,
+
+            [Description("Hitsound volume")]
+            Hitsound,
         }
 
         public enum ShapeMode
@@ -58,6 +70,11 @@ namespace osu.Game.Screens.Edit.MappingTools
         public readonly Bindable<ShapeMode> Shape = new Bindable<ShapeMode>();
 
         public readonly Bindable<SpacingSource> Spacing = new Bindable<SpacingSource>();
+
+        /// <summary>
+        /// For <see cref="SpeedMode.Volume"/>: what the spacing follows.
+        /// </summary>
+        public readonly Bindable<VolumeSource> VolumeFrom = new Bindable<VolumeSource>();
 
         /// <summary>
         /// How much bigger the widest gap is than the tightest when accelerating or decelerating.
@@ -119,7 +136,9 @@ namespace osu.Game.Screens.Edit.MappingTools
         /// <param name="positions">Object positions, in time order.</param>
         /// <param name="times">Object start times, same order.</param>
         /// <param name="distanceSnap">For <see cref="SpacingSource.DistanceSnap"/>: the distance snapped spacing for a gap (start time, duration).</param>
-        public Vector2[] Organise(IReadOnlyList<Vector2> positions, IReadOnlyList<double> times, Func<double, double, double>? distanceSnap = null)
+        /// <param name="volumes">For <see cref="SpeedMode.Volume"/>: the volume at each object (any scale, louder is bigger). Null spaces evenly.</param>
+        public Vector2[] Organise(IReadOnlyList<Vector2> positions, IReadOnlyList<double> times, Func<double, double, double>? distanceSnap = null,
+                                  IReadOnlyList<double>? volumes = null)
         {
             double ratio = Speed.Value switch
             {
@@ -128,7 +147,55 @@ namespace osu.Game.Screens.Edit.MappingTools
                 _ => 1,
             };
 
-            return Wiggled(Organise(positions, times, ratio, FollowShape.Value, Shape.Value, Spacing.Value == SpacingSource.DistanceSnap ? distanceSnap : null), Wiggle.Value);
+            double[]? gapScale = Speed.Value == SpeedMode.Volume && volumes != null ? VolumeGapScale(volumes, Strength.Value) : null;
+
+            return Wiggled(Organise(positions, times, ratio, FollowShape.Value, Shape.Value, Spacing.Value == SpacingSource.DistanceSnap ? distanceSnap : null, gapScale),
+                Wiggle.Value);
+        }
+
+        /// <summary>
+        /// YAWNS: spacing scale for each gap from the volume at its two objects: the loudest gap of the selection is <paramref name="strength"/> times
+        /// the quietest, medium volume is 1 (plain distance snap). Equal volumes give even spacing.
+        /// </summary>
+        public static double[] VolumeGapScale(IReadOnlyList<double> volumes, double strength)
+        {
+            double[] gapVolumes = volumes.Zip(volumes.Skip(1), (a, b) => (a + b) / 2).ToArray();
+
+            if (gapVolumes.Length == 0)
+                return gapVolumes;
+
+            double min = gapVolumes.Min();
+            double range = gapVolumes.Max() - min;
+
+            return gapVolumes.Select(v => range < 1e-6 ? 1 : Math.Pow(strength, (v - min) / range - 0.5)).ToArray();
+        }
+
+        /// <summary>
+        /// YAWNS: how loud the song is at each object, in dB: the mean amplitude from the object to the next one (its own beat of the rhythm;
+        /// the last object uses the gap before it), blurred over neighbouring objects so alternating kicks and hats don't zigzag the spacing.
+        /// </summary>
+        /// <param name="times">Object start times in ms, in order.</param>
+        /// <param name="amplitude">The song's amplitude (0 to 1), one value per millisecond.</param>
+        public static double[] SongLoudness(IReadOnlyList<double> times, IReadOnlyList<float> amplitude)
+        {
+            int n = times.Count;
+            double[] loudness = new double[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                double length = i < n - 1 ? times[i + 1] - times[i] : i > 0 ? times[i] - times[i - 1] : 0;
+                int from = Math.Clamp((int)times[i], 0, amplitude.Count);
+                int to = Math.Clamp((int)(times[i] + Math.Max(length, 10)), from, amplitude.Count);
+
+                double sum = 0;
+                for (int t = from; t < to; t++)
+                    sum += amplitude[t];
+
+                double mean = to > from ? sum / (to - from) : 0;
+                loudness[i] = 20 * Math.Log10(Math.Max(mean, 1e-4));
+            }
+
+            return n > 2 ? gaussian(loudness, 1) : loudness;
         }
 
         /// <param name="positions">Object positions, in time order.</param>
@@ -140,8 +207,9 @@ namespace osu.Game.Screens.Edit.MappingTools
         /// When given, gap i is <c>distanceSnap(start, duration)</c> scaled by the speed ramp, and the last object moves (past the curve's end if needed).
         /// When null, the gaps are scaled so the last object lands on the last hand-placed position.
         /// </param>
+        /// <param name="gapScale">YAWNS: when given, the spacing scale of each gap, used instead of the <paramref name="ratio"/> ramp.</param>
         public static Vector2[] Organise(IReadOnlyList<Vector2> positions, IReadOnlyList<double> times, double ratio, double followShape,
-                                         ShapeMode shape = ShapeMode.Clean, Func<double, double, double>? distanceSnap = null)
+                                         ShapeMode shape = ShapeMode.Clean, Func<double, double, double>? distanceSnap = null, IReadOnlyList<double>? gapScale = null)
         {
             int n = positions.Count;
 
@@ -157,7 +225,7 @@ namespace osu.Game.Screens.Edit.MappingTools
             for (int i = 0; i < n - 1; i++)
             {
                 double duration = Math.Max(times[i + 1] - times[i], 0);
-                double ramp = Math.Pow(ratio, (double)i / (n - 2));
+                double ramp = gapScale?[i] ?? Math.Pow(ratio, (double)i / (n - 2));
                 gaps[i] = (distanceSnap?.Invoke(times[i], duration) ?? duration) * ramp;
             }
 
