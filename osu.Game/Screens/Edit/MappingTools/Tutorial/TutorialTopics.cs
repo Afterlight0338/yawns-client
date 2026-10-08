@@ -349,14 +349,21 @@ namespace osu.Game.Screens.Edit.MappingTools.Tutorial
 
             // Other
             new TutorialTopic("Other", "Hitsounds tab",
-                "A native version of Hitsound Studio's lanes. Work on a hitsound difficulty: click a lane to add or remove a hit, Ctrl+drag paints, right-drag erases, Shift+drag selects. Lanes have mute, solo and a volume for new hits. The overlay map shows as ghost notes.",
+                "Hitsound Studio inside the editor: lanes of hitsounds on a timeline, each lane one sample (sample set, addition, custom index, volume). Lanes and notes are saved as a project next to the difficulty; Export writes them into the hitsound difficulty the way Mapping Tools does: one circle per moment, with new custom indices and mixed samples where lanes overlap, so nothing is lost. The Copier puts them on the other difficulties.",
                 new[]
                 {
                     "Open the Hitsounds tab on a hitsound difficulty (a gameplay difficulty is read-only, with a button to create a hitsound one).",
-                    "Click, Ctrl+drag or right-drag in the lanes. Delete, Ctrl+C/X/V work on a selection. Alt+scroll zooms.",
-                    "\"Import hitsounds from...\" reads another difficulty. \"Copy to difficulties...\" runs the Hitsound Copier and saves them.",
+                    "Click places a note, dragging on empty space selects, dragging a note moves the selection (also to another lane), Ctrl+drag paints, right-click deletes, right-drag erases.",
+                    "W, E, R put a whistle, finish or clap on the selected moments. C and V copy and paste at the playhead, X or Delete deletes, 1 to 6 change the snap, G hides the ghost notes, Ctrl+Z undoes.",
+                    "Pick a difficulty in the lane rack to see it as ghost notes (in Hitsounds mode its hitsounds become the lanes). Drop an audio file on a lane to use it as that lane's sample.",
+                    "Export (also done when you save), then Copier, tick the difficulties, Copy and save.",
                 },
                 "Hitsounds tab (top right).", TutorialDiagrams.HitsoundLanes),
+
+            new TutorialTopic("Other", "New version check",
+                "The only thing YAWNS does online: when the game starts it asks GitHub for the latest YAWNS release and shows a notification with a link when there is a newer one. Nothing is downloaded or installed.",
+                new[] { "Nothing to do: it runs on start.", "Settings, General, YAWNS version: turn it off or check now." },
+                "Settings, General, YAWNS version.", TutorialDiagrams.Flow("game starts", "GitHub: latest release", "notification with a link if newer")),
 
             new TutorialTopic("Other", "Map backups",
                 "Every save also writes a copy of the difficulty to a backups folder, newest 30 per difficulty kept, so a bad edit or a crash never costs more than the last save.",

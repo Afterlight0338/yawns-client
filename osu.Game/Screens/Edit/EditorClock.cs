@@ -34,6 +34,12 @@ namespace osu.Game.Screens.Edit
 
         public AudioAdjustments AudioAdjustments { get; } = new AudioAdjustments();
 
+        /// <summary>
+        /// YAWNS: the playback speed (tempo). The clock applies it as its one tempo adjustment, and every speed control binds to it
+        /// (the bottom bar and the Hitsounds tab's rate select), so they always agree and never multiply.
+        /// </summary>
+        public readonly BindableDouble PlaybackSpeed = new BindableDouble(1);
+
         public ControlPointInfo ControlPointInfo => Beatmap.ControlPointInfo;
 
         public IBeatmap Beatmap { get; set; }
@@ -61,6 +67,8 @@ namespace osu.Game.Screens.Edit
 
             underlyingClock = new FramedBeatmapClock(applyOffsets: true, requireDecoupling: true);
             AddInternal(underlyingClock);
+
+            AudioAdjustments.AddAdjustment(AdjustableProperty.Tempo, PlaybackSpeed); // YAWNS
 
             track.BindValueChanged(_ => TrackChanged?.Invoke());
         }

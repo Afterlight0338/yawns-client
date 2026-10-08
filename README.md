@@ -1,11 +1,11 @@
 # YAWNS
 
-**Yet Another Worthless Niche Slop**, v6769.001. A mapping-only editor client: the menus lead to song select and the editor, nothing else. It works fully offline.
+**Yet Another Worthless Niche Slop**, v6769.001. A mapping-only editor client: the menus lead to song select and the editor, nothing else. It works offline; the only thing it does online is look for a newer YAWNS release on start (can be turned off in settings).
 
 ## What's in it
 
 - **Map overlay:** another map under the one you edit, with its rhythm on two timeline lanes and mismatched hitsounds marked.
-- **Hitsounds tab:** Hitsound Studio's lanes inside the editor, with ghost notes from any difficulty.
+- **Hitsounds tab:** Hitsound Studio inside the editor (lanes, ghost notes from any difficulty, copier), exporting the hitsound difficulty the way Mapping Tools does: one circle per moment, nothing lost.
 - **Tools tab:** Hitsound Copier, Timing Copier, Property Transformer, Rhythm Guide, Pattern Gallery, Map Cleaner, Mapset Merger, Combo Colour Studio, Timing Helper.
 - **Right-click a selection, Tools:** organise stream, save as pattern, align to axis, radial copy, complete sliders, Sliderator, tumours.
 - **Mapping tools toolbox:** axis guide and Snapping Tools.

@@ -601,6 +601,12 @@ namespace osu.Game.Screens.Edit
         internal event Action Saved;
 
         /// <summary>
+        /// YAWNS: raised right before the beatmap is written, so the Hitsounds tab can write its lanes into it first.
+        /// </summary>
+        [CanBeNull]
+        internal event Action Saving;
+
+        /// <summary>
         /// Saves the currently edited beatmap.
         /// </summary>
         /// <returns>Whether the save was successful.</returns>
@@ -611,6 +617,8 @@ namespace osu.Game.Screens.Edit
                 notifications?.Post(new SimpleErrorNotification { Text = EditorStrings.RulesetNotSupportSaving });
                 return false;
             }
+
+            Saving?.Invoke();
 
             try
             {

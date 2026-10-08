@@ -4,6 +4,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using osu.Game.Audio;
 using osu.Game.Beatmaps;
 using osu.Game.Rulesets.Objects;
@@ -14,7 +18,7 @@ using osuTK;
 namespace osu.Game.Screens.Edit.MappingTools.Hitsounds
 {
     /// <summary>
-    /// YAWNS: what a lane plays. Port of Hitsound Studio's lanes (https://hitsound.vivlos.dev).
+    /// YAWNS: what a sample plays: a skin or beatmap sample (bank, sample, custom index) or a custom sample file.
     /// </summary>
     /// <param name="Sample">One of <see cref="HitSampleInfo.HIT_NORMAL"/>, whistle, finish or clap. Ignored when <paramref name="File"/> is set.</param>
     /// <param name="Bank">normal, soft or drum.</param>
@@ -39,7 +43,7 @@ namespace osu.Game.Screens.Edit.MappingTools.Hitsounds
                     _ => "HitNormal",
                 };
 
-                return $"{char.ToUpperInvariant(Bank[0])}{Bank[1..]} {sample}{(Index > 0 ? $" #{Index}" : "")}";
+                return $"{HitsoundProject.BankName(Bank)} {sample}{(Index > 0 ? $" #{Index}" : "")}";
             }
         }
 
@@ -58,36 +62,285 @@ namespace osu.Game.Screens.Edit.MappingTools.Hitsounds
     }
 
     /// <summary>
-    /// YAWNS: one hit on a lane.
+    /// YAWNS: one sample a beatmap plays at a moment.
     /// </summary>
-    public record HitsoundTrigger(double Time, HitsoundSound Sound, int Volume);
+    public record HitsoundSample(double Time, HitsoundSound Sound, int Volume);
+
+    public enum HitsoundAddition
+    {
+        None,
+        Whistle,
+        Finish,
+        Clap,
+    }
 
     /// <summary>
-    /// YAWNS: Hitsound Studio's lanes and triggers, read from and written to a hitsound difficulty (every object a circle in the middle of the playfield).
-    /// The difficulty's objects are the saved form: there is no separate project file.
+    /// YAWNS: a lane of Hitsound Studio (https://hitsound.vivlos.dev): what its hits play, and how it is shown.
+    /// Editing it changes every hit on it.
+    /// </summary>
+    public class HitsoundLane
+    {
+        public string Id { get; set; } = HitsoundProject.NewId("lane");
+
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The sample set: normal, soft or drum.
+        /// </summary>
+        public string Bank { get; set; } = HitSampleInfo.BANK_SOFT;
+
+        [JsonConverter(typeof(StringEnumConverter))]
+        public HitsoundAddition Addition { get; set; }
+
+        /// <summary>
+        /// The addition's own sample set, or null for "Auto" (the lane's <see cref="Bank"/>).
+        /// </summary>
+        public string? AdditionBank { get; set; }
+
+        /// <summary>
+        /// Custom sample index: 0 plays the skin's sample, 1 the beatmap's soft-hitclap.wav, 2 and up soft-hitclap2.wav and so on.
+        /// </summary>
+        public int Index { get; set; }
+
+        /// <summary>
+        /// Volume of hits that do not have their own, 0 to 100.
+        /// </summary>
+        public int Volume { get; set; } = 85;
+
+        public string Colour { get; set; } = HitsoundProject.LANE_COLOURS[0];
+
+        /// <summary>
+        /// A custom sample file in the beatmap set, played instead of the bank and addition.
+        /// </summary>
+        public string? File { get; set; }
+
+        public bool Muted { get; set; }
+
+        public bool Solo { get; set; }
+
+        [JsonIgnore]
+        public string SampleName => Addition switch
+        {
+            HitsoundAddition.Whistle => HitSampleInfo.HIT_WHISTLE,
+            HitsoundAddition.Finish => HitSampleInfo.HIT_FINISH,
+            HitsoundAddition.Clap => HitSampleInfo.HIT_CLAP,
+            _ => HitSampleInfo.HIT_NORMAL,
+        };
+
+        /// <summary>
+        /// The bank the lane's sample comes from: the addition bank for additions, the lane's bank otherwise.
+        /// </summary>
+        [JsonIgnore]
+        public string SampleBank => Addition == HitsoundAddition.None ? Bank : AdditionBank ?? Bank;
+
+        [JsonIgnore]
+        public HitsoundSound Sound => new HitsoundSound(SampleName, SampleBank, Index, File);
+
+        public HitsoundLane Clone() => (HitsoundLane)MemberwiseClone();
+    }
+
+    /// <summary>
+    /// YAWNS: one hit on a lane.
+    /// </summary>
+    public class HitsoundTrigger
+    {
+        public string Id { get; set; } = HitsoundProject.NewId("tr");
+
+        public string LaneId { get; set; } = string.Empty;
+
+        public double Time { get; set; }
+
+        /// <summary>
+        /// This hit's own volume, or null to use the lane's.
+        /// </summary>
+        public int? Volume { get; set; }
+
+        public int VolumeOn(HitsoundLane lane) => Volume ?? lane.Volume;
+
+        public HitsoundTrigger Clone() => (HitsoundTrigger)MemberwiseClone();
+    }
+
+    /// <summary>
+    /// YAWNS: the lanes and hits of one hitsound difficulty. This is what is edited; the difficulty is written from it on export.
+    /// Saved in game storage next to the other difficulties' projects, never inside the beatmap set.
+    /// </summary>
+    public class HitsoundProjectData
+    {
+        public int Version { get; set; } = 1;
+
+        public List<HitsoundLane> Lanes { get; set; } = new List<HitsoundLane>();
+
+        public List<HitsoundTrigger> Triggers { get; set; } = new List<HitsoundTrigger>();
+
+        public bool Compact { get; set; }
+
+        /// <summary>
+        /// <see cref="HitsoundProject.Hash"/> of the difficulty right after the last export, to notice changes made elsewhere.
+        /// </summary>
+        public string? ExportedHash { get; set; }
+
+        /// <summary>
+        /// Sample files the last export wrote into the set, removed again when a later export no longer needs them.
+        /// </summary>
+        public List<string> GeneratedFiles { get; set; } = new List<string>();
+
+        public string Serialise() => JsonConvert.SerializeObject(this, Formatting.Indented);
+
+        public static HitsoundProjectData? Deserialise(string json)
+        {
+            try
+            {
+                var data = JsonConvert.DeserializeObject<HitsoundProjectData>(json);
+
+                // A hit on a lane that no longer exists would never play or export.
+                if (data != null)
+                    data.Triggers.RemoveAll(t => data.Lanes.All(l => l.Id != t.LaneId));
+
+                return data;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// YAWNS: Hitsound Studio's lanes and hits read from beatmaps, and the helpers for hitsound difficulties (every object a circle in the middle of the playfield).
     /// </summary>
     public static class HitsoundProject
     {
         public static readonly Vector2 POSITION = new Vector2(256, 192);
 
+        public static readonly string[] BANKS = { HitSampleInfo.BANK_SOFT, HitSampleInfo.BANK_NORMAL, HitSampleInfo.BANK_DRUM };
+
         /// <summary>
-        /// Every sample the beatmap plays, as triggers: circles at their start, slider heads, repeats and tails at their nodes, spinners at their end.
+        /// As Hitsound Studio's importer.
         /// </summary>
-        public static List<HitsoundTrigger> Import(IBeatmap beatmap)
+        public static readonly string[] LANE_COLOURS =
         {
-            var triggers = new List<HitsoundTrigger>();
+            "#ff4081", "#00e5ff", "#ffc400", "#76ff03", "#e040fb",
+            "#ff6e40", "#40c4ff", "#b2ff59", "#ffd740", "#69f0ae",
+            "#ff5252", "#7c4dff", "#18ffff", "#b388ff", "#ffab40",
+            "#00b0ff", "#f50057", "#00e676", "#ff9100", "#651fff",
+        };
+
+        public static string NewId(string prefix) => $"{prefix}-{Guid.NewGuid().ToString("N")[..10]}";
+
+        public static string BankName(string bank) => bank.Length == 0 ? bank : char.ToUpperInvariant(bank[0]) + bank[1..];
+
+        public static string AdditionName(HitsoundAddition addition) => addition == HitsoundAddition.None ? "HitNormal" : addition.ToString();
+
+        public static HitsoundAddition AdditionOf(string sampleName) => sampleName switch
+        {
+            HitSampleInfo.HIT_WHISTLE => HitsoundAddition.Whistle,
+            HitSampleInfo.HIT_FINISH => HitsoundAddition.Finish,
+            HitSampleInfo.HIT_CLAP => HitsoundAddition.Clap,
+            _ => HitsoundAddition.None,
+        };
+
+        /// <summary>
+        /// The lanes Hitsound Studio starts with.
+        /// </summary>
+        public static List<HitsoundLane> DefaultLanes() => new List<HitsoundLane>
+        {
+            new HitsoundLane { Name = "Soft Clap", Bank = HitSampleInfo.BANK_SOFT, Addition = HitsoundAddition.Clap, Volume = 90, Colour = "#ff4081" },
+            new HitsoundLane { Name = "Soft Whistle", Bank = HitSampleInfo.BANK_SOFT, Addition = HitsoundAddition.Whistle, Volume = 80, Colour = "#00e5ff" },
+            new HitsoundLane { Name = "Soft Finish", Bank = HitSampleInfo.BANK_SOFT, Addition = HitsoundAddition.Finish, Volume = 90, Colour = "#ffc400" },
+            new HitsoundLane { Name = "Drum Kick", Bank = HitSampleInfo.BANK_DRUM, Addition = HitsoundAddition.None, Volume = 85, Colour = "#76ff03" },
+        };
+
+        /// <summary>
+        /// Every sample the beatmap plays: circles at their start, slider heads, repeats and tails at their nodes, spinners at their end.
+        /// </summary>
+        public static List<HitsoundSample> Import(IBeatmap beatmap)
+        {
+            var samples = new List<HitsoundSample>();
 
             foreach (var h in beatmap.HitObjects)
             {
-                foreach (var (time, samples) in samplePoints(h))
+                foreach (var (time, nodeSamples) in samplePoints(h))
                 {
-                    foreach (var sample in samples)
-                        triggers.Add(new HitsoundTrigger(Math.Round(time), HitsoundSound.FromSample(sample), sample.Volume));
+                    foreach (var sample in nodeSamples)
+                        samples.Add(new HitsoundSample(Math.Round(time), HitsoundSound.FromSample(sample), sample.Volume));
                 }
             }
 
-            return triggers.Distinct().OrderBy(t => t.Time).ToList();
+            return samples.Distinct().OrderBy(t => t.Time).ToList();
         }
+
+        /// <summary>
+        /// The beatmap's hitsounds as lanes and hits, with Hitsound Studio's importer rules:
+        /// one lane per bank, addition and custom index that actually plays (a custom index whose file the set lacks plays the skin's sample),
+        /// one lane per custom sample file, lanes in order of first use, the lane volume from its first hit.
+        /// </summary>
+        /// <param name="beatmap">The beatmap to read.</param>
+        /// <param name="setFiles">The file names in the beatmap set, to tell which custom indices have files. Null treats every index as present.</param>
+        public static (List<HitsoundLane> Lanes, List<HitsoundTrigger> Triggers) ImportLanes(IBeatmap beatmap, IEnumerable<string>? setFiles)
+        {
+            var files = setFiles == null ? null : new HashSet<string>(setFiles.Select(f => f.ToLowerInvariant()));
+            var lanes = new Dictionary<HitsoundSound, HitsoundLane>();
+            var triggers = new List<HitsoundTrigger>();
+            var placed = new HashSet<(string, double)>();
+
+            foreach (var sample in Import(beatmap))
+            {
+                var sound = sample.Sound.File != null
+                    ? sample.Sound
+                    : sample.Sound with { Index = EffectiveIndex(sample.Sound.Bank, sample.Sound.Sample, sample.Sound.Index, files) };
+
+                if (!lanes.TryGetValue(sound, out var lane))
+                {
+                    lanes[sound] = lane = new HitsoundLane
+                    {
+                        Name = sound.File != null ? System.IO.Path.GetFileNameWithoutExtension(sound.File) : sound.Name,
+                        Bank = sound.File != null ? HitSampleInfo.BANK_SOFT : sound.Bank,
+                        Addition = sound.File != null ? HitsoundAddition.None : AdditionOf(sound.Sample),
+                        Index = sound.File != null ? 0 : sound.Index,
+                        File = sound.File,
+                        Volume = sample.Volume > 0 ? sample.Volume : 85,
+                        Colour = LANE_COLOURS[lanes.Count % LANE_COLOURS.Length],
+                    };
+                }
+
+                if (!placed.Add((lane.Id, sample.Time)))
+                    continue;
+
+                triggers.Add(new HitsoundTrigger
+                {
+                    LaneId = lane.Id,
+                    Time = sample.Time,
+                    Volume = sample.Volume == lane.Volume ? null : sample.Volume,
+                });
+            }
+
+            return (lanes.Values.ToList(), triggers);
+        }
+
+        /// <summary>
+        /// The custom index that actually plays, as lazer looks samples up (<see cref="HitSampleInfo.LookupNames"/>):
+        /// one whose numbered file the set lacks falls back to the set's unnumbered file (index 1), and then to the skin (index 0).
+        /// </summary>
+        public static int EffectiveIndex(string bank, string sampleName, int index, ISet<string>? lowercaseFiles)
+        {
+            if (lowercaseFiles == null || index <= 0)
+                return index;
+
+            string stem = $"{bank}-{sampleName}";
+
+            if (index > 1 && FindAudio(lowercaseFiles, $"{stem}{index}") != null)
+                return index;
+
+            return FindAudio(lowercaseFiles, stem) != null ? 1 : 0;
+        }
+
+        /// <summary>
+        /// The set's audio file for a sample name without extension (lowercase), or null.
+        /// </summary>
+        public static string? FindAudio(ISet<string> lowercaseFiles, string stem) =>
+            AUDIO_EXTENSIONS.Select(ext => $"{stem}{ext}").FirstOrDefault(lowercaseFiles.Contains);
+
+        public static readonly string[] AUDIO_EXTENSIONS = { ".wav", ".ogg", ".mp3" };
 
         private static IEnumerable<(double Time, IList<HitSampleInfo> Samples)> samplePoints(HitObject h)
         {
@@ -112,59 +365,16 @@ namespace osu.Game.Screens.Edit.MappingTools.Hitsounds
         }
 
         /// <summary>
-        /// The objects a hitsound difficulty needs to play <paramref name="triggers"/>.
-        /// An object has one normal bank, one addition bank, one custom index and one volume, so simultaneous triggers that differ in those
-        /// become several stacked objects (osu! plays every object's hitnormal, as it always does).
+        /// A fingerprint of what the beatmap's objects play, to notice when a hitsound difficulty was changed outside the Hitsounds tab.
         /// </summary>
-        /// <param name="triggers">The hits, in any order.</param>
-        /// <param name="createCircle">Creates the ruleset's plain circle at the given time and position.</param>
-        public static List<HitObject> Generate(IEnumerable<HitsoundTrigger> triggers, Func<double, Vector2, HitObject> createCircle)
+        public static string Hash(IBeatmap beatmap)
         {
-            var objects = new List<HitObject>();
+            var text = new StringBuilder();
 
-            foreach (var moment in triggers.GroupBy(t => Math.Round(t.Time)).OrderBy(g => g.Key))
-            {
-                // The loudest hitnormal decides the normal bank, the rest is grouped by what has to be shared on one object.
-                var normal = moment.Where(t => t.Sound.File == null && !t.Sound.IsAddition).MaxBy(t => t.Volume);
-                var additions = moment.Where(t => t.Sound.IsAddition)
-                                      .GroupBy(t => (t.Sound.Bank, t.Sound.Index))
-                                      .Select(g => g.GroupBy(t => t.Sound.Sample).Select(s => s.MaxBy(t => t.Volume)!).ToList())
-                                      .ToList();
-                var files = moment.Where(t => t.Sound.File != null).GroupBy(t => t.Sound).Select(g => g.MaxBy(t => t.Volume)!);
+            foreach (var sample in Import(beatmap))
+                text.Append($"{sample.Time}:{sample.Sound}:{sample.Volume};");
 
-                bool normalPlaced = false;
-
-                foreach (var group in additions)
-                {
-                    var first = group[0].Sound;
-
-                    // The hitnormal can share the first object if it uses the same custom index.
-                    bool withNormal = !normalPlaced && normal != null && normal.Sound.Index == first.Index;
-                    var normalSound = withNormal ? normal!.Sound : new HitsoundSound(HitSampleInfo.HIT_NORMAL, first.Bank, first.Index);
-                    int volume = Math.Max(group.Max(t => t.Volume), withNormal ? normal!.Volume : 0);
-
-                    var samples = new List<HitSampleInfo> { normalSound.ToSample(volume) };
-                    samples.AddRange(group.Select(t => t.Sound.ToSample(volume)));
-
-                    objects.Add(circle(createCircle, moment.Key, samples));
-                    normalPlaced |= withNormal;
-                }
-
-                if (normal != null && !normalPlaced)
-                    objects.Add(circle(createCircle, moment.Key, new List<HitSampleInfo> { normal.Sound.ToSample(normal.Volume) }));
-
-                foreach (var file in files)
-                    objects.Add(circle(createCircle, moment.Key, new List<HitSampleInfo> { file.Sound.ToSample(file.Volume) }));
-            }
-
-            return objects;
-        }
-
-        private static HitObject circle(Func<double, Vector2, HitObject> createCircle, double time, List<HitSampleInfo> samples)
-        {
-            var h = createCircle(time, POSITION);
-            h.Samples = samples;
-            return h;
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
         }
 
         /// <summary>

@@ -5,7 +5,6 @@ using System.Linq;
 using osuTK;
 using osuTK.Graphics;
 using osu.Framework.Allocation;
-using osu.Framework.Audio;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions.IEnumerableExtensions;
 using osu.Framework.Extensions.ObjectExtensions;
@@ -75,7 +74,8 @@ namespace osu.Game.Screens.Edit.Components
                 }
             };
 
-            editorClock.AudioAdjustments.AddAdjustment(AdjustableProperty.Tempo, tempoAdjustment);
+            // YAWNS: the clock applies its playback speed itself; this control (and the Hitsounds tab's rate select) only sets it.
+            tempoAdjustment.BindTo(editorClock.PlaybackSpeed);
 
             if (editor != null)
                 currentScreenMode.BindTo(editor.Mode);
@@ -105,8 +105,10 @@ namespace osu.Game.Screens.Edit.Components
 
         protected override void Dispose(bool isDisposing)
         {
-            if (editorClock.IsNotNull())
-                editorClock.AudioAdjustments.RemoveAdjustment(AdjustableProperty.Tempo, tempoAdjustment);
+            // YAWNS: back to normal speed when the control goes away, as removing its own adjustment used to do
+            // (through the clock: this control's copy of the speed is already unbound when it is disposed).
+            if (editorClock.IsNotNull() && !editorClock.PlaybackSpeed.Disabled)
+                editorClock.PlaybackSpeed.Value = 1;
 
             base.Dispose(isDisposing);
         }

@@ -27,6 +27,8 @@ namespace osu.Game.Overlays.Settings.Sections
         {
             Add(new QuickActionSettings());
             Add(new LanguageSettings());
+            // YAWNS: the only online feature, a check for new YAWNS releases.
+            Add(new YawnsVersionSettings());
             if (updateManager?.CanCheckForUpdate == true)
                 Add(new UpdateSettings());
             if (RuntimeInfo.IsDesktop)

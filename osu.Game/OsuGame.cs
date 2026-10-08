@@ -372,6 +372,13 @@ namespace osu.Game
             }
         }
 
+        /// <summary>
+        /// YAWNS: lets a screen take dropped files instead of importing them (the Hitsounds tab loads audio into a lane).
+        /// Called on the window's thread; returns whether the file was taken.
+        /// </summary>
+        [CanBeNull]
+        public Func<string, bool> FileDropOverride { get; set; }
+
         private void onWindowDragDrop(string path)
         {
             // on macOS/iOS, URL associations are handled via SDL_DROPFILE events.
@@ -380,6 +387,9 @@ namespace osu.Game
                 HandleLink(path);
                 return;
             }
+
+            if (FileDropOverride?.Invoke(path) == true)
+                return;
 
             lock (dragDropFiles)
             {
@@ -1213,6 +1223,8 @@ namespace osu.Game
 
             // dependency on notification overlay, dependent by settings overlay
             loadComponentSingleFile(CreateUpdateManager(), Add, true);
+            // YAWNS: looks for a newer YAWNS release (Release builds, can be turned off in settings).
+            loadComponentSingleFile(new YawnsVersionChecker(), Add, true);
 
             // overlay elements
             loadComponentSingleFile(FirstRunOverlay = new FirstRunSetupOverlay(), footerBasedOverlayContent.Add, true);

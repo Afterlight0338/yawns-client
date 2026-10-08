@@ -1,15 +1,11 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-using System.IO;
+using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using NUnit.Framework;
 using osu.Game.Audio;
-using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
-using osu.Game.Beatmaps.Formats;
-using osu.Game.IO;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
 using osu.Game.Rulesets.Osu;
@@ -21,80 +17,79 @@ using osuTK;
 namespace osu.Game.Tests.Editing
 {
     /// <summary>
-    /// YAWNS: <see cref="HitsoundProject"/>, the Hitsound Studio port.
+    /// YAWNS: <see cref="HitsoundProject"/>, the Hitsounds tab's lanes read from beatmaps (Hitsound Studio's importer rules).
     /// </summary>
     [TestFixture]
     public class HitsoundProjectTest
     {
-        private static readonly HitsoundSound soft_normal = new HitsoundSound(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT);
-        private static readonly HitsoundSound soft_clap = new HitsoundSound(HitSampleInfo.HIT_CLAP, HitSampleInfo.BANK_SOFT);
-        private static readonly HitsoundSound soft_whistle = new HitsoundSound(HitSampleInfo.HIT_WHISTLE, HitSampleInfo.BANK_SOFT);
-        private static readonly HitsoundSound drum_finish = new HitsoundSound(HitSampleInfo.HIT_FINISH, HitSampleInfo.BANK_DRUM);
-        private static readonly HitsoundSound drum_normal = new HitsoundSound(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_DRUM);
-        private static readonly HitsoundSound normal_clap_2 = new HitsoundSound(HitSampleInfo.HIT_CLAP, HitSampleInfo.BANK_NORMAL, 2);
+        private static HitSampleInfo sample(string name, string bank, int index = 0, int volume = 100) =>
+            new HitSampleInfo(name, bank, index >= 2 ? index.ToString() : null, volume, useBeatmapSamples: index >= 1);
 
-        private static HitObject circle(double time, Vector2 position) => new HitCircle { StartTime = time, Position = position };
-
-        [Test]
-        public void TestSimultaneousSameBankShareOneObject()
-        {
-            var objects = HitsoundProject.Generate(new[]
-            {
-                new HitsoundTrigger(1000, soft_normal, 80),
-                new HitsoundTrigger(1000, soft_clap, 80),
-                new HitsoundTrigger(1000, soft_whistle, 80),
-            }, circle);
-
-            Assert.That(objects, Has.Count.EqualTo(1));
-            Assert.That(((HitCircle)objects[0]).Position, Is.EqualTo(HitsoundProject.POSITION));
-            Assert.That(objects[0].Samples.Select(s => s.Name), Is.EquivalentTo(new[] { HitSampleInfo.HIT_NORMAL, HitSampleInfo.HIT_CLAP, HitSampleInfo.HIT_WHISTLE }));
-        }
-
-        [Test]
-        public void TestDifferentAdditionBanksSplit()
-        {
-            var objects = HitsoundProject.Generate(new[]
-            {
-                new HitsoundTrigger(1000, soft_normal, 100),
-                new HitsoundTrigger(1000, soft_clap, 100),
-                new HitsoundTrigger(1000, drum_finish, 100),
-            }, circle);
-
-            Assert.That(objects, Has.Count.EqualTo(2), "one addition bank per object");
-            Assert.That(objects.Count(o => o.Samples.Any(s => s.Name == HitSampleInfo.HIT_NORMAL && s.Bank == HitSampleInfo.BANK_SOFT)), Is.EqualTo(1));
-        }
-
-        [Test]
-        public void TestDifferentIndexSplitsNormal()
-        {
-            var objects = HitsoundProject.Generate(new[]
-            {
-                new HitsoundTrigger(1000, soft_normal, 100),
-                new HitsoundTrigger(1000, normal_clap_2, 100),
-            }, circle);
-
-            Assert.That(objects, Has.Count.EqualTo(2), "one custom index per object");
-            Assert.That(objects.Single(o => o.Samples.Any(s => s.Name == HitSampleInfo.HIT_CLAP)).Samples.All(s => s.Suffix == "2"));
-        }
-
-        [Test]
-        public void TestObjectVolumeIsTheLoudest()
-        {
-            var objects = HitsoundProject.Generate(new[]
-            {
-                new HitsoundTrigger(1000, soft_normal, 40),
-                new HitsoundTrigger(1000, soft_clap, 90),
-            }, circle);
-
-            Assert.That(objects.Single().Samples.Select(s => s.Volume), Is.All.EqualTo(90));
-        }
-
-        [Test]
-        public void TestImportSliderNodes()
+        private static OsuBeatmap beatmapWith(params HitObject[] objects)
         {
             var beatmap = new OsuBeatmap { BeatmapInfo = { Ruleset = new OsuRuleset().RulesetInfo } };
             beatmap.ControlPointInfo.Add(0, new TimingControlPoint { BeatLength = 500 });
 
+            foreach (var h in objects)
+            {
+                h.ApplyDefaults(beatmap.ControlPointInfo, beatmap.Difficulty);
+                beatmap.HitObjects.Add((OsuHitObject)h);
+            }
+
+            return beatmap;
+        }
+
+        private static HitCircle circle(double time, params HitSampleInfo[] samples) => new HitCircle { StartTime = time, Position = HitsoundProject.POSITION, Samples = samples.ToList() };
+
+        [Test]
+        public void TestOneLanePerSoundInOrderOfFirstUse()
+        {
+            var beatmap = beatmapWith(
+                circle(1000, sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT), sample(HitSampleInfo.HIT_CLAP, HitSampleInfo.BANK_DRUM)),
+                circle(1500, sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT)),
+                circle(2000, sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_NORMAL, 2)));
+
+            var (lanes, triggers) = HitsoundProject.ImportLanes(beatmap, null);
+
+            Assert.That(lanes.Select(l => l.Name), Is.EqualTo(new[] { "Soft HitNormal", "Drum Clap", "Normal HitNormal #2" }));
+            Assert.That(lanes[1].Bank, Is.EqualTo(HitSampleInfo.BANK_DRUM), "an addition lane's bank is the addition's bank");
+            Assert.That(lanes[1].Addition, Is.EqualTo(HitsoundAddition.Clap));
+            Assert.That(triggers.Count(t => t.LaneId == lanes[0].Id), Is.EqualTo(2));
+            Assert.That(lanes.Select(l => l.Colour).Distinct().Count(), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void TestMissingCustomIndexFallsBackLikeLazer()
+        {
+            var beatmap = beatmapWith(
+                circle(1000, sample(HitSampleInfo.HIT_CLAP, HitSampleInfo.BANK_SOFT, 3)),
+                circle(1500, sample(HitSampleInfo.HIT_WHISTLE, HitSampleInfo.BANK_SOFT, 4)),
+                circle(2000, sample(HitSampleInfo.HIT_FINISH, HitSampleInfo.BANK_SOFT, 2)));
+
+            // soft-hitclap3 is missing but soft-hitclap.wav exists (index 1); soft-hitwhistle4 is missing entirely (skin); soft-hitfinish2 exists.
+            var (lanes, _) = HitsoundProject.ImportLanes(beatmap, new[] { "soft-hitclap.wav", "Soft-HitFinish2.ogg", "audio.mp3" });
+
+            Assert.That(lanes.Select(l => l.Index), Is.EqualTo(new[] { 1, 0, 2 }));
+        }
+
+        [Test]
+        public void TestHitVolumeOnlyWhereItDiffersFromTheLane()
+        {
+            var beatmap = beatmapWith(
+                circle(1000, sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT, volume: 70)),
+                circle(1500, sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT, volume: 40)),
+                circle(2000, sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT, volume: 70)));
+
+            var (lanes, triggers) = HitsoundProject.ImportLanes(beatmap, null);
+
+            Assert.That(lanes.Single().Volume, Is.EqualTo(70), "the lane takes its first hit's volume");
+            Assert.That(triggers.Select(t => t.Volume), Is.EqualTo(new int?[] { null, 40, null }));
+            Assert.That(triggers.Select(t => t.VolumeOn(lanes[0])), Is.EqualTo(new[] { 70, 40, 70 }));
+        }
+
+        [Test]
+        public void TestImportSliderNodesAndSpinnerEnd()
+        {
             var slider = new Slider
             {
                 StartTime = 1000,
@@ -102,62 +97,68 @@ namespace osu.Game.Tests.Editing
                 Path = new SliderPath(new[] { new PathControlPoint(Vector2.Zero, PathType.LINEAR), new PathControlPoint(new Vector2(140, 0)) }),
                 NodeSamples =
                 {
-                    new[] { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT) },
-                    new[] { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT), new HitSampleInfo(HitSampleInfo.HIT_CLAP, HitSampleInfo.BANK_SOFT) },
-                    new[] { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_DRUM) },
+                    new List<HitSampleInfo> { sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT) },
+                    new List<HitSampleInfo> { sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT), sample(HitSampleInfo.HIT_CLAP, HitSampleInfo.BANK_SOFT) },
+                    new List<HitSampleInfo> { sample(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_DRUM) },
                 },
             };
-            beatmap.HitObjects.Add(slider);
-            slider.ApplyDefaults(beatmap.ControlPointInfo, beatmap.Difficulty);
+            var spinner = new Spinner { StartTime = 5000, Duration = 1000, Samples = { sample(HitSampleInfo.HIT_FINISH, HitSampleInfo.BANK_NORMAL) } };
 
-            var triggers = HitsoundProject.Import(beatmap);
+            var beatmap = beatmapWith(slider, spinner);
             double span = slider.SpanDuration;
 
-            Assert.That(triggers.Select(t => (t.Time, t.Sound)), Is.EquivalentTo(new[]
+            var samples = HitsoundProject.Import(beatmap);
+
+            Assert.That(samples.Select(s => (s.Time, s.Sound.Name)), Is.EquivalentTo(new[]
             {
-                (1000.0, soft_normal),
-                (System.Math.Round(1000 + span), soft_normal),
-                (System.Math.Round(1000 + span), soft_clap),
-                (System.Math.Round(1000 + 2 * span), drum_normal),
+                (1000.0, "Soft HitNormal"),
+                (System.Math.Round(1000 + span), "Soft HitNormal"),
+                (System.Math.Round(1000 + span), "Soft Clap"),
+                (System.Math.Round(1000 + 2 * span), "Drum HitNormal"),
+                (6000.0, "Normal Finish"),
             }));
         }
 
         [Test]
-        public void TestSurvivesOsuFile()
+        public void TestProjectSurvivesJson()
         {
-            var triggers = new[]
+            var project = new HitsoundProjectData
             {
-                new HitsoundTrigger(1000, soft_normal, 70),
-                new HitsoundTrigger(1000, soft_clap, 70),
-                new HitsoundTrigger(1250, drum_normal, 50),
-                new HitsoundTrigger(1250, drum_finish, 50),
-                new HitsoundTrigger(1500, normal_clap_2, 100),
-                new HitsoundTrigger(1500, new HitsoundSound(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_NORMAL, 2), 100),
-                new HitsoundTrigger(1750, new HitsoundSound(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_NORMAL, File: "kick.wav"), 60),
+                Lanes = HitsoundProject.DefaultLanes(),
+                Compact = true,
+                ExportedHash = "ABC",
+                GeneratedFiles = { "soft-hitclap2.wav" },
             };
+            project.Lanes[0].File = "kick.wav";
+            project.Lanes[1].Muted = true;
+            project.Triggers.Add(new HitsoundTrigger { LaneId = project.Lanes[0].Id, Time = 1000, Volume = 40 });
+            project.Triggers.Add(new HitsoundTrigger { LaneId = project.Lanes[3].Id, Time = 1250 });
 
-            var beatmap = new OsuBeatmap { BeatmapInfo = { Ruleset = new OsuRuleset().RulesetInfo } };
-            beatmap.ControlPointInfo.Add(0, new TimingControlPoint { BeatLength = 500 });
-            beatmap.HitObjects.AddRange(HitsoundProject.Generate(triggers, circle).Cast<OsuHitObject>());
+            var read = HitsoundProjectData.Deserialise(project.Serialise())!;
 
-            foreach (var h in beatmap.HitObjects)
-                h.ApplyDefaults(beatmap.ControlPointInfo, beatmap.Difficulty);
+            Assert.That(read.Lanes.Select(l => (l.Id, l.Name, l.Bank, l.Addition, l.Index, l.Volume, l.Colour, l.File, l.Muted)),
+                Is.EqualTo(project.Lanes.Select(l => (l.Id, l.Name, l.Bank, l.Addition, l.Index, l.Volume, l.Colour, l.File, l.Muted))));
+            Assert.That(read.Triggers.Select(t => (t.Id, t.LaneId, t.Time, t.Volume)), Is.EqualTo(project.Triggers.Select(t => (t.Id, t.LaneId, t.Time, t.Volume))));
+            Assert.That(read.Compact, Is.True);
+            Assert.That(read.ExportedHash, Is.EqualTo("ABC"));
+            Assert.That(read.GeneratedFiles, Is.EqualTo(new[] { "soft-hitclap2.wav" }));
+        }
 
-            var stream = new MemoryStream();
-            using (var writer = new StreamWriter(stream, Encoding.UTF8, 1024, true))
-                new LegacyBeatmapEncoder(beatmap, null, null).Encode(writer);
-            stream.Position = 0;
+        [Test]
+        public void TestBrokenProjectJsonIsIgnored()
+        {
+            Assert.That(HitsoundProjectData.Deserialise("{ not json"), Is.Null);
 
-            IBeatmap decoded;
-            using (var reader = new LineBufferedReader(stream))
-                decoded = new FlatWorkingBeatmap(new LegacyBeatmapDecoder { ApplyOffsets = false }.Decode(reader)).GetPlayableBeatmap(new OsuRuleset().RulesetInfo);
+            // Hits on a lane that is not there are dropped.
+            var read = HitsoundProjectData.Deserialise("{\"Lanes\":[],\"Triggers\":[{\"LaneId\":\"gone\",\"Time\":5}]}")!;
+            Assert.That(read.Triggers, Is.Empty);
+        }
 
-            Assert.That(HitsoundProject.IsHitsoundDifficulty(decoded));
-
-            // A custom file sample also plays the object's hitnormal in osu!, so ignore that one extra trigger.
-            var imported = HitsoundProject.Import(decoded).Where(t => !(t.Time == 1750 && t.Sound.File == null)).ToList();
-
-            Assert.That(imported, Is.EquivalentTo(triggers));
+        [Test]
+        public void TestDefaultLanesAreHitsoundStudios()
+        {
+            Assert.That(HitsoundProject.DefaultLanes().Select(l => (l.Name, l.Volume)),
+                Is.EqualTo(new[] { ("Soft Clap", 90), ("Soft Whistle", 80), ("Soft Finish", 90), ("Drum Kick", 85) }));
         }
 
         [Test]
